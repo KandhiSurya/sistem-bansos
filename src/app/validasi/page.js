@@ -1,7 +1,9 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+// Import Recharts untuk visualisasi data
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts'
 
 // --- 1. KOMPONEN KARTU STATISTIK ---
 const StatCard = ({ title, count, icon, color }) => (
@@ -37,8 +39,6 @@ export default function ValidasiPage() {
   // State Search & Filter
   const [searchTerm, setSearchTerm] = useState('')
   const [activeTab, setActiveTab] = useState('Pending') 
-  
-  // --- FITUR BARU: STATE FILTER PROGRAM ---
   const [filterProgram, setFilterProgram] = useState('Semua')
   
   // State Modal Detail
@@ -85,23 +85,20 @@ export default function ValidasiPage() {
     setLoading(false)
   }
 
-  // --- LOGIKA FILTERING (UPDATED) ---
+  // --- LOGIKA FILTERING ---
   useEffect(() => {
     let result = dataBansos
     
-    // 1. Filter by Status (Tab)
     if (activeTab === 'Pending') {
       result = result.filter(d => d.status === 'Menunggu Validasi')
     } else {
       result = result.filter(d => d.status !== 'Menunggu Validasi')
     }
 
-    // 2. Filter by Program (Fitur Baru)
     if (filterProgram !== 'Semua') {
       result = result.filter(d => d.jenis_bantuan === filterProgram)
     }
 
-    // 3. Filter by Search
     if (searchTerm) {
       result = result.filter(d => 
         d.nama_lengkap.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -110,23 +107,81 @@ export default function ValidasiPage() {
       )
     }
     setFilteredData(result)
-  }, [dataBansos, activeTab, searchTerm, filterProgram]) // Tambahkan filterProgram ke dependency
+  }, [dataBansos, activeTab, searchTerm, filterProgram]) 
 
-  // --- DAPATKAN LIST PROGRAM UNIK ---
   const uniquePrograms = ['Semua', ...new Set(dataBansos.map(item => item.jenis_bantuan))]
 
-  const handleEditStatus = async (id, newStatus, alasan = null) => {
-    if(!confirm(`Ubah status menjadi ${newStatus}?`)) return
-    const { error } = await supabase.from('pengajuan_bantuan').update({ status: newStatus, alasan_penolakan: alasan }).eq('id', id)
-    if (error) alert("Gagal update status")
-    if (selectedItem) setSelectedItem(null) 
+  // --- DATA UNTUK GRAFIK (DIHITUNG OTOMATIS) ---
+  const pieData = [
+    { name: 'PKH', value: stats.pkh },
+    { name: 'KIP', value: stats.kip },
+    { name: 'FAKMIS', value: stats.fakmis }
+  ]
+  const PIE_COLORS = ['#4f46e5', '#06b6d4', '#a855f7'] 
+
+  const barData = useMemo(() => {
+    const cityCounts = {}
+    dataBansos.forEach(item => {
+      const city = item.kabupaten_kota || 'Belum Diatur'
+      cityCounts[city] = (cityCounts[city] || 0) + 1
+    })
+    return Object.keys(cityCounts).map(city => ({
+      name: city,
+      Total: cityCounts[city]
+    })).sort((a, b) => b.Total - a.Total) 
+  }, [dataBansos])
+
+  // --- FUNGSI UPDATE STATUS & KIRIM EMAIL ---
+  const handleEditStatus = async (item, newStatus, alasan = null) => {
+    if(!confirm(`Ubah status pengajuan ${item.nama_lengkap} menjadi ${newStatus}?`)) return
+    
+    try {
+      // 1. Update Database
+      const { error } = await supabase
+        .from('pengajuan_bantuan')
+        .update({ status: newStatus, alasan_penolakan: alasan })
+        .eq('id', item.id)
+      
+      if (error) throw error
+
+      // 2. Cari Email Operator Pembuat Data Ini
+      const { data: operatorProfile } = await supabase
+        .from('profiles')
+        .select('email')
+        .eq('id', item.user_id)
+        .single()
+
+      const emailOperator = operatorProfile?.email
+
+      // 3. Panggil API Notifikasi Email
+      if (emailOperator) {
+        console.log("Mengirim email ke operator:", emailOperator)
+        await fetch('/api/bidang/notify-operator', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            email_operator: emailOperator,
+            nama_pemohon: item.nama_lengkap,
+            jenis_bantuan: item.jenis_bantuan,
+            status_verifikasi: newStatus,
+            catatan: alasan || '-'
+          })
+        })
+      } else {
+        console.warn("Operator tidak memiliki email yang terdaftar.")
+      }
+
+      alert("Status berhasil diperbarui dan notifikasi telah dikirim ke Operator!")
+      if (selectedItem) setSelectedItem(null) 
+      
+    } catch (err) {
+      alert("Gagal memproses data: " + err.message)
+    }
   }
 
-  // --- FUNGSI UPDATE AKTIF/NONAKTIF (TOGGLE SWITCH) ---
+  // --- FUNGSI UPDATE AKTIF/NONAKTIF ---
   const handleToggleStatus = async (id, currentStatus) => {
     const newStatus = currentStatus === 'Aktif' ? 'Nonaktif' : 'Aktif'
-    
-    // Pesan Konfirmasi yang Jelas
     const msg = newStatus === 'Nonaktif' 
       ? "⚠️ PERINGATAN: Anda akan MENONAKTIFKAN penerima ini.\n\nArtinya: Bantuan untuk orang ini akan DIHENTIKAN sementara.\nLanjutkan?" 
       : "✅ MENGAKTIFKAN KEMBALI?\n\nPenerima ini akan kembali terdaftar sebagai penerima bantuan aktif.";
@@ -190,7 +245,7 @@ export default function ValidasiPage() {
         </head>
         <body>
           <h1>Detail Verifikasi Bantuan Sosial</h1>
-          <p class="meta">ID DATA: ${item.id} | DICETAK: ${new Date().toLocaleDateString()}</p>
+          <p class="meta">ID DATA: ${item.id} | DICETAK: ${new Date().toLocaleDateString('id-ID')}</p>
           
           <div class="grid-info">
             <div class="col">
@@ -241,7 +296,7 @@ export default function ValidasiPage() {
       <nav className="bg-gray-900 sticky top-0 z-30 px-6 md:px-10 py-4 flex justify-between items-center shadow-xl shadow-gray-200/20">
         <div className="flex items-center gap-4">
           <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center text-white font-bold text-sm border border-gray-600 shadow-inner">V</div>
-          <div><h1 className="text-lg font-bold text-white leading-tight tracking-tight">Bidang Provinsi</h1><p className="text-xs text-gray-400 font-medium">Dashboard Bidang</p></div>
+          <div><h1 className="text-lg font-bold text-white leading-tight tracking-tight">Bidang Provinsi</h1><p className="text-xs text-gray-400 font-medium">Dashboard Analytics</p></div>
         </div>
         <button onClick={() => { supabase.auth.signOut(); router.push('/') }} className="text-xs font-bold text-white bg-gray-800 hover:bg-gray-700 border border-gray-700 px-5 py-2.5 rounded-lg transition-all">LOGOUT</button>
       </nav>
@@ -256,18 +311,40 @@ export default function ValidasiPage() {
           <StatCard title="Ditolak" count={stats.ditolak} color="bg-rose-600" icon={<svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>} />
         </div>
 
-        {/* GRAFIK MINI */}
-        <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
-           <h3 className="text-gray-400 text-xs font-bold uppercase tracking-wider mb-4">Sebaran Bantuan (Realtime)</h3>
-           <div className="flex gap-4">
-              {['PKH', 'KIP', 'FAKMIS'].map(type => (
-                 <div key={type} className={`flex-1 rounded-xl p-4 flex items-center justify-between border relative overflow-hidden group ${type === 'PKH' ? 'bg-indigo-50 border-indigo-100' : type === 'KIP' ? 'bg-cyan-50 border-cyan-100' : 'bg-purple-50 border-purple-100'}`}>
-                    <div className="z-10 relative">
-                       <span className={`font-bold text-xs ${type === 'PKH' ? 'text-indigo-600' : type === 'KIP' ? 'text-cyan-700' : 'text-purple-700'}`}>{type}</span>
-                       <h4 className="text-2xl font-extrabold text-gray-900">{stats[type.toLowerCase()]}</h4>
-                    </div>
-                 </div>
-              ))}
+        {/* --- VISUALISASI GRAFIK ANALYTICS --- */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+           {/* Pie Chart: Sebaran Program */}
+           <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm flex flex-col items-center">
+              <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-4 w-full border-b border-gray-100 pb-2">Distribusi Program</h3>
+              <div className="w-full h-48">
+                 <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                       <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value">
+                          {pieData.map((entry, index) => (
+                             <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} />
+                          ))}
+                       </Pie>
+                       <RechartsTooltip formatter={(value) => [`${value} Orang`, 'Total']} />
+                       <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                    </PieChart>
+                 </ResponsiveContainer>
+              </div>
+           </div>
+
+           {/* Bar Chart: Sebaran per Kota/Kabupaten */}
+           <div className="md:col-span-2 bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
+              <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-4 border-b border-gray-100 pb-2">Profil Pengajuan per Kabupaten/Kota</h3>
+              <div className="w-full h-48">
+                 <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={barData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                       <XAxis dataKey="name" tick={{fontSize: 10, fill: '#6b7280'}} axisLine={false} tickLine={false} />
+                       <YAxis tick={{fontSize: 10, fill: '#6b7280'}} axisLine={false} tickLine={false} />
+                       <RechartsTooltip cursor={{fill: '#f3f4f6'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'}} />
+                       <Bar dataKey="Total" fill="#4f46e5" radius={[4, 4, 0, 0]} barSize={40} />
+                    </BarChart>
+                 </ResponsiveContainer>
+              </div>
            </div>
         </div>
 
@@ -284,7 +361,6 @@ export default function ValidasiPage() {
             </div>
             
             <div className="pb-2 md:pb-0 w-full md:w-auto flex gap-3 items-center">
-               {/* --- FITUR BARU: DROPDOWN FILTER --- */}
                <div className="relative">
                     <select 
                       value={filterProgram} 
@@ -298,7 +374,6 @@ export default function ValidasiPage() {
                     <div className="absolute right-3 top-3 pointer-events-none text-gray-500"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg></div>
                </div>
 
-               {/* KOLOM SEARCH */}
                <div className="relative flex-1">
                  <input type="text" placeholder="Cari NIK / Nama..." className="pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-medium focus:ring-2 focus:ring-gray-900 outline-none w-full md:w-64 transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
                  <svg className="w-4 h-4 text-gray-400 absolute left-3.5 top-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
@@ -327,7 +402,7 @@ export default function ValidasiPage() {
                             <div>
                             <div className="text-sm font-bold text-gray-900 leading-none">{item.nama_lengkap}</div>
                             <div className="text-xs text-gray-400 font-mono mt-1.5">{item.nik}</div>
-                            <div className="text-[10px] text-gray-400 mt-1">{new Date(item.created_at).toLocaleDateString()}</div>
+                            <div className="text-[10px] text-gray-400 mt-1">{new Date(item.created_at).toLocaleDateString('id-ID')}</div>
                             </div>
                         </div>
                         </td>
@@ -345,7 +420,6 @@ export default function ValidasiPage() {
                         )}
                         </td>
                         
-                        {/* --- TOGGLE SWITCH AKTIF/NONAKTIF (DESAIN BARU) --- */}
                         <td className="px-8 py-5 align-middle">
                             {item.status === 'Disetujui' ? (
                             <button 
@@ -353,11 +427,9 @@ export default function ValidasiPage() {
                                 className="group flex items-center gap-3 focus:outline-none"
                                 title={item.status_penerima === 'Nonaktif' ? 'Klik untuk Mengaktifkan' : 'Klik untuk Mematikan'}
                             >
-                                {/* Visual Toggle */}
                                 <div className={`w-11 h-6 flex items-center rounded-full p-1 duration-300 ease-in-out ${ (item.status_penerima || 'Aktif') === 'Aktif' ? 'bg-indigo-500' : 'bg-gray-300' }`}>
                                     <div className={`bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out ${ (item.status_penerima || 'Aktif') === 'Aktif' ? 'translate-x-5' : '' }`}></div>
                                 </div>
-                                {/* Label Text */}
                                 <span className={`text-xs font-bold uppercase transition-colors ${(item.status_penerima || 'Aktif') === 'Aktif' ? 'text-indigo-600' : 'text-gray-400'}`}>
                                     {(item.status_penerima || 'Aktif') === 'Aktif' ? 'Aktif' : 'Nonaktif'}
                                 </span>
@@ -371,10 +443,10 @@ export default function ValidasiPage() {
                             <div className="flex justify-end gap-2">
                             {item.status === 'Menunggu Validasi' ? (
                                 <>
-                                <button onClick={() => handleEditStatus(item.id, 'Disetujui')} className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all border border-emerald-100 shadow-sm" title="Setujui">✓</button>
+                                <button onClick={() => handleEditStatus(item, 'Disetujui')} className="w-9 h-9 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-500 hover:text-white transition-all border border-emerald-100 shadow-sm" title="Setujui">✓</button>
                                 <button onClick={() => {
                                     const alasan = prompt("Masukkan alasan penolakan:")
-                                    if(alasan) handleEditStatus(item.id, 'Perlu Revisi', alasan)
+                                    if(alasan) handleEditStatus(item, 'Perlu Revisi', alasan)
                                 }} className="w-9 h-9 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center hover:bg-rose-500 hover:text-white transition-all border border-rose-100 shadow-sm" title="Tolak">✕</button>
                                 </>
                             ) : null}
@@ -396,7 +468,7 @@ export default function ValidasiPage() {
         </div>
       </main>
 
-      {/* --- MODAL DETAIL (DENGAN CETAK & BUKA GAMBAR) --- */}
+      {/* --- MODAL DETAIL LENGKAP --- */}
       {selectedItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-gray-900/80 backdrop-blur-sm">
            <div className="bg-white rounded-3xl w-full max-w-4xl max-h-[90vh] overflow-y-auto animate-fade-in-up border border-gray-100 shadow-2xl">
@@ -456,9 +528,9 @@ export default function ValidasiPage() {
                  <div className="sticky bottom-0 bg-white border-t border-gray-100 px-8 py-5 flex justify-end gap-3 z-10">
                     <button onClick={() => {
                        const alasan = prompt("Masukkan alasan penolakan:")
-                       if(alasan) handleEditStatus(selectedItem.id, 'Perlu Revisi', alasan)
+                       if(alasan) handleEditStatus(selectedItem, 'Perlu Revisi', alasan)
                     }} className="px-6 py-2.5 rounded-xl border border-rose-200 text-rose-600 font-bold text-sm hover:bg-rose-50 transition">Tolak Pengajuan</button>
-                    <button onClick={() => handleEditStatus(selectedItem.id, 'Disetujui')} className="px-6 py-2.5 rounded-xl bg-emerald-500 text-white font-bold text-sm hover:bg-emerald-600 shadow-lg shadow-emerald-200 transition">Setujui Sekarang</button>
+                    <button onClick={() => handleEditStatus(selectedItem, 'Disetujui')} className="px-6 py-2.5 rounded-xl bg-emerald-500 text-white font-bold text-sm hover:bg-emerald-600 shadow-lg shadow-emerald-200 transition">Setujui Sekarang</button>
                  </div>
               )}
            </div>
@@ -467,4 +539,4 @@ export default function ValidasiPage() {
 
     </div>
   )
-}
+} 

@@ -1,7 +1,9 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+// 👇 IMPORT RECHARTS 👇
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from 'recharts'
 
 // --- 1. KOMPONEN KARTU STATISTIK ---
 const StatCard = ({ title, count, icon, color }) => (
@@ -48,7 +50,7 @@ const getStatusBadge = (status) => {
 
 // --- 4. HELPER: BADGE STATUS KEAKTIFAN PENERIMA (READ ONLY) ---
 const getActiveBadge = (isActive) => {
-    if (isActive) {
+    if (isActive === 'Aktif' || isActive === true || isActive === null || isActive === undefined) {
         return (
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-cyan-50 text-cyan-700 border border-cyan-100">
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
@@ -68,14 +70,14 @@ const getActiveBadge = (isActive) => {
 export default function SuperAdminPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('users') // 'users' or 'data'
+  const [activeTab, setActiveTab] = useState('users') 
   
   // Data State
   const [users, setUsers] = useState([])
   const [allBansos, setAllBansos] = useState([])
   const [stats, setStats] = useState({ users: 0, totalData: 0, cities: 0 })
 
-  // --- FITUR BARU: STATE FILTER ---
+  // State Filter
   const [filterProgram, setFilterProgram] = useState('Semua')
 
   // Form State
@@ -89,7 +91,6 @@ export default function SuperAdminPage() {
         const { data: { user } } = await supabase.auth.getUser()
         if (!user) { router.push('/'); return }
         
-        // Cek apakah benar superadmin
         const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
         
         if (!profile || profile.role !== 'superadmin') { 
@@ -105,9 +106,9 @@ export default function SuperAdminPage() {
         setAllBansos(bansosData || [])
         
         setStats({
-        users: usersData?.length || 0,
-        totalData: bansosData?.length || 0,
-        cities: usersData?.filter(u => u.role === 'operator').length || 0
+          users: usersData?.length || 0,
+          totalData: bansosData?.length || 0,
+          cities: usersData?.filter(u => u.role === 'operator').length || 0
         })
     } catch (error) {
         console.error("Error Fetching Data:", error)
@@ -118,14 +119,32 @@ export default function SuperAdminPage() {
 
   useEffect(() => { fetchData() }, [router])
 
-  // --- FITUR BARU: LOGIKA FILTER ---
-  // 1. Dapatkan daftar program unik secara otomatis dari data yang ada
+  // --- LOGIKA FILTER ---
   const uniquePrograms = ['Semua', ...new Set(allBansos.map(item => item.jenis_bantuan))]
-
-  // 2. Filter data berdasarkan pilihan dropdown
   const filteredData = filterProgram === 'Semua' 
     ? allBansos 
     : allBansos.filter(item => item.jenis_bantuan === filterProgram)
+
+  // --- DATA UNTUK GRAFIK RECHARTS ---
+  const pieData = useMemo(() => {
+    const roles = { operator: 0, bidang: 0, superadmin: 0 }
+    users.forEach(u => { if (roles[u.role] !== undefined) roles[u.role]++ })
+    return [
+      { name: 'Operator', value: roles.operator },
+      { name: 'Bidang', value: roles.bidang },
+      { name: 'Admin', value: roles.superadmin }
+    ]
+  }, [users])
+  const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b']
+
+  const barData = useMemo(() => {
+    const cityCounts = {}
+    users.filter(u => u.role === 'operator').forEach(u => {
+      const city = u.kabupaten_kota || 'Belum Diatur'
+      cityCounts[city] = (cityCounts[city] || 0) + 1
+    })
+    return Object.keys(cityCounts).map(city => ({ name: city, Total: cityCounts[city] })).sort((a,b) => b.Total - a.Total)
+  }, [users])
 
 
   // --- ACTIONS UTAMA ---
@@ -254,6 +273,38 @@ export default function SuperAdminPage() {
           <StatCard title="Data Bansos" count={stats.totalData} color="bg-emerald-600" icon={<svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>} />
         </div>
 
+        {/* --- GRAFIK ANALISIS (BARU DITAMBAHKAN) --- */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+           <div className="bg-white border border-gray-100 rounded-2xl p-6 shadow-sm flex flex-col items-center">
+              <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-4 border-b border-gray-100 pb-2 w-full text-center">Distribusi Role Akun</h3>
+              <div className="w-full h-48">
+                 <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                       <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value">
+                          {pieData.map((entry, index) => <Cell key={`cell-${index}`} fill={PIE_COLORS[index % PIE_COLORS.length]} /> )}
+                       </Pie>
+                       <RechartsTooltip formatter={(value) => [`${value} Akun`, 'Total']} />
+                       <Legend verticalAlign="bottom" height={36} iconType="circle" />
+                    </PieChart>
+                 </ResponsiveContainer>
+              </div>
+           </div>
+           <div className="md:col-span-2 bg-white border border-gray-100 rounded-2xl p-6 shadow-sm">
+              <h3 className="text-gray-500 text-xs font-bold uppercase tracking-wider mb-4 border-b border-gray-100 pb-2">Sebaran Wilayah Operator Aktif</h3>
+              <div className="w-full h-48">
+                 <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={barData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                       <XAxis dataKey="name" tick={{fontSize: 10, fill: '#6b7280'}} axisLine={false} tickLine={false} />
+                       <YAxis tick={{fontSize: 10, fill: '#6b7280'}} axisLine={false} tickLine={false} />
+                       <RechartsTooltip cursor={{fill: '#f3f4f6'}} contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)'}} />
+                       <Bar dataKey="Total" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={40} />
+                    </BarChart>
+                 </ResponsiveContainer>
+              </div>
+           </div>
+        </div>
+
         {/* CONTAINER UTAMA */}
         <div className="bg-white rounded-3xl border border-gray-100 shadow-xl shadow-gray-200/40 overflow-hidden min-h-[600px]">
           
@@ -322,7 +373,7 @@ export default function SuperAdminPage() {
             {activeTab === 'data' && (
               <div>
                 
-                {/* --- FITUR BARU: DROPDOWN FILTER --- */}
+                {/* --- FITUR DROPDOWN FILTER --- */}
                 <div className="px-8 py-4 bg-gray-50 border-b border-gray-100 flex items-center gap-3">
                   <span className="text-xs font-bold text-gray-500 uppercase tracking-wide">Filter Program:</span>
                   <div className="relative">
@@ -375,7 +426,7 @@ export default function SuperAdminPage() {
                               {getStatusBadge(item.status)}
                             </td>
                             <td className="px-8 py-5 align-middle">
-                              {getActiveBadge(item.is_active)} 
+                              {getActiveBadge(item.status_penerima)} 
                             </td>
                             <td className="px-8 py-5 text-right align-middle">
                               <button 
@@ -447,4 +498,4 @@ export default function SuperAdminPage() {
       )}
     </div>
   )
-}
+} 
