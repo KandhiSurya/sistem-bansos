@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.91.0",
+    "browser-image-compression": "^2.0.2",
     "exceljs": "^4.4.0",
     "file-saver": "^2.0.5",
     "next": "^16.1.6",
@@ -20,6 +21,7 @@
     "react-dom": "19.2.3",
     "react-hot-toast": "^2.6.0",
     "recharts": "^3.8.1",
+    "resend": "^6.12.4",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

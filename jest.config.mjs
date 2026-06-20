@@ -7,11 +7,12 @@ const createJestConfig = nextJest({
 
 // Konfigurasi kustom Jest
 const config = {
+  setupFiles: ['<rootDir>/jest.polyfills.js'],
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
-  testEnvironment: 'jest-environment-jsdom',
+  testEnvironment: '<rootDir>/jest-environment-jsdom-with-globals.js',
   moduleNameMapper: {
     // Membantu Jest membaca absolute import menggunakan tanda '@'
-    '^@/(.*)$': '<rootDir>/$1',
+    '^@/(.*)$': '<rootDir>/src/$1',
   },
 }
 

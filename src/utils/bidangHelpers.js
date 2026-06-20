@@ -29,12 +29,11 @@ export const prosesVerifikasi = async (payloadPengajuan, statusBaru, layananKiri
   return updatedPayload;
 };
 
-// BD-04 & BD-05: Toggle keaktifan boolean (aktif/non-aktif)
+// BD-04 & BD-05: Toggle keaktifan string ('Aktif'/'Nonaktif') tanpa alasan spesifik
 export const toggleStatusKeaktifan = (dataArray = [], targetId) => {
   return dataArray.map(item =>
     item.id === targetId
-      // Membalikkan nilai boolean: jika true jadi false, jika false/null jadi true
-      ? { ...item, status_penerima: !item.status_penerima } 
+      ? { ...item, status_penerima: (item.status_penerima || 'Aktif') === 'Aktif' ? 'Nonaktif' : 'Aktif' } 
       : item
   );
 };
@@ -48,4 +47,30 @@ export const hitungStatistikProvinsi = (semuaData = []) => {
     if (curr.status === 'Ditolak' || curr.status === 'Perlu Revisi') acc.ditolakAtauRevisi += 1;
     return acc;
   }, { total: 0, menunggu: 0, disetujui: 0, ditolakAtauRevisi: 0 });
+};
+
+// --- TAMBAHAN UNTUK MENUTUPI CELAH USER STORY ---
+
+// BD-04: Menonaktifkan warga beserta pencatatan alasannya
+export const prosesNonAktifData = (payloadLama, alasan) => {
+  return {
+    ...payloadLama,
+    status_penerima: 'Nonaktif',
+    alasan_nonaktif: alasan,
+    updated_at: new Date().toISOString()
+  };
+};
+
+// BD-05: Memisahkan data aktif untuk layar utama dan data arsip
+export const pisahkanDataArsip = (semuaData = []) => {
+  return {
+    dataAktif: semuaData.filter(item => (item.status_penerima || 'Aktif') !== 'Nonaktif'),
+    dataArsip: semuaData.filter(item => item.status_penerima === 'Nonaktif')
+  };
+};
+
+// BD-01: Filter antrean berdasarkan program bantuan (Klasifikasi Program)
+export const filterAntreanProgram = (dataAntrean = [], programPilihan) => {
+  if (programPilihan === 'Semua') return dataAntrean;
+  return dataAntrean.filter(item => item.jenis_bantuan === programPilihan);
 };

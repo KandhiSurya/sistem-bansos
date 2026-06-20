@@ -33,7 +33,7 @@ export async function POST(request) {
     console.log("📦 Data diterima:", { email, role, kota })
 
     // 4. Buat User Auth
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    const { data, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email: email,
       password: password,
       email_confirm: true
@@ -44,7 +44,8 @@ export async function POST(request) {
       throw authError
     }
 
-    console.log("✅ User Auth berhasil dibuat. ID:", user.id)
+    const user = data?.user
+    console.log("✅ User Auth berhasil dibuat. ID:", user?.id)
 
     // 5. Update Profile (Termasuk mengupdate email agar tidak "No Email")
     const { error: profileError } = await supabaseAdmin

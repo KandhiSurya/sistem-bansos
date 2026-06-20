@@ -32,15 +32,21 @@ export async function DELETE(request) {
     
     if (listBansos && listBansos.length > 0) {
       listBansos.forEach(row => {
-        const extractName = (url) => {
+        const extractPath = (url) => {
           if (!url) return null
-          const parts = url.split('/')
+          const cleanUrl = url.split('?')[0]
+          const marker = '/dokumen_bansos/'
+          const index = cleanUrl.indexOf(marker)
+          if (index !== -1) {
+            return cleanUrl.substring(index + marker.length)
+          }
+          const parts = cleanUrl.split('/')
           return parts[parts.length - 1]
         }
-        if (row.foto_ktp) filesToDelete.push(extractName(row.foto_ktp))
-        if (row.foto_diri) filesToDelete.push(extractName(row.foto_diri))
-        if (row.foto_pekerjaan) filesToDelete.push(extractName(row.foto_pekerjaan))
-        if (row.foto_rumah) filesToDelete.push(extractName(row.foto_rumah))
+        if (row.foto_ktp) filesToDelete.push(extractPath(row.foto_ktp))
+        if (row.foto_diri) filesToDelete.push(extractPath(row.foto_diri))
+        if (row.foto_pekerjaan) filesToDelete.push(extractPath(row.foto_pekerjaan))
+        if (row.foto_rumah) filesToDelete.push(extractPath(row.foto_rumah))
       })
     }
 
@@ -51,6 +57,10 @@ export async function DELETE(request) {
 
     // 5. COBA HAPUS DARI AUTHENTICATION (Login)
     const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(id)
+    if (authError && !authError.message?.includes('User not found')) {
+      console.error("❌ Gagal menghapus auth user:", authError.message)
+      throw authError
+    }
 
     // 6. [PENTING] PAKSA HAPUS DARI TABEL PROFILES (DB)
     // Langkah ini wajib ada untuk membersihkan "User Hantu" 

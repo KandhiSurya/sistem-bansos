@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+import toast from 'react-hot-toast'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -12,6 +13,34 @@ export default function LoginPage() {
   
   // State baru untuk fitur lihat password
   const [showPassword, setShowPassword] = useState(false)
+
+  // State untuk Lupa Kata Sandi
+  const [forgotModalOpen, setForgotModalOpen] = useState(false)
+  const [resetEmail, setResetEmail] = useState('')
+  const [sendingReset, setSendingReset] = useState(false)
+
+  const handleForgotPasswordSubmit = async (e) => {
+    e.preventDefault()
+    if (!resetEmail) {
+      toast.error("Silakan masukkan email Anda.")
+      return
+    }
+    setSendingReset(true)
+    const toastId = toast.loading("Mengirim link reset password...")
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(resetEmail, {
+        redirectTo: `${window.location.origin}/update-password`,
+      })
+      if (error) throw error
+      toast.success("Link pemulihan kata sandi telah dikirim ke email Anda!", { id: toastId })
+      setForgotModalOpen(false)
+      setResetEmail('')
+    } catch (error) {
+      toast.error("Gagal mengirim email: " + error.message, { id: toastId })
+    } finally {
+      setSendingReset(false)
+    }
+  }
 
   const handleLogin = async (e) => {
     e.preventDefault()
@@ -93,7 +122,7 @@ export default function LoginPage() {
               <p className="text-sm text-slate-500 mt-2 font-medium">Silakan masuk menggunakan akun yang telah terdaftar di sistem.</p>
             </div>
 
-            <form onSubmit={handleLogin} className="space-y-6">
+            <form onSubmit={handleLogin} className="space-y-6" autoComplete="off">
               
               {/* Notifikasi Error */}
               {errorMsg && (
@@ -112,6 +141,7 @@ export default function LoginPage() {
                   <input 
                     type="email" 
                     required 
+                    autoComplete="off"
                     className="w-full px-5 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-blue-900 focus:ring-2 focus:ring-blue-900/20 transition-all placeholder-slate-400" 
                     placeholder="contoh: admin@dinsos.jatimprov.go.id" 
                     value={email} 
@@ -128,6 +158,7 @@ export default function LoginPage() {
                     <input 
                       type={showPassword ? "text" : "password"} 
                       required 
+                      autoComplete="new-password"
                       className="w-full pl-5 pr-12 py-3.5 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-blue-900 focus:ring-2 focus:ring-blue-900/20 transition-all placeholder-slate-400" 
                       placeholder="••••••••" 
                       value={password} 
@@ -153,6 +184,15 @@ export default function LoginPage() {
                           <path strokeLinecap="round" strokeLinejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
                         </svg>
                       )}
+                    </button>
+                  </div>
+                  <div className="flex justify-end mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setForgotModalOpen(true)}
+                      className="text-xs font-bold text-slate-400 hover:text-blue-900 transition-colors focus:outline-none"
+                    >
+                      Lupa Kata Sandi?
                     </button>
                   </div>
                 </div>
@@ -183,6 +223,59 @@ export default function LoginPage() {
         </div>
 
       </div>
+
+      {/* MODAL LUPA KATA SANDI */}
+      {forgotModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+          <div className="bg-white rounded-[1.5rem] shadow-xl w-full max-w-md overflow-hidden border border-slate-200">
+            <div className="px-6 py-5 flex justify-between items-center border-b border-slate-100 bg-slate-50">
+              <h3 className="text-base font-extrabold text-slate-800">Lupa Kata Sandi</h3>
+              <button 
+                type="button" 
+                onClick={() => { setForgotModalOpen(false); setResetEmail(''); }} 
+                className="text-slate-400 hover:text-slate-800 text-xl leading-none"
+              >
+                &times;
+              </button>
+            </div>
+            <form onSubmit={handleForgotPasswordSubmit} className="p-6 space-y-5">
+              <p className="text-xs text-slate-500 leading-relaxed font-medium">
+                Masukkan alamat email yang terdaftar di sistem. Kami akan mengirimkan tautan (link) untuk menyetel ulang kata sandi Anda.
+              </p>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Email Akun Anda
+                </label>
+                <input 
+                  required 
+                  type="email" 
+                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:outline-none focus:bg-white focus:border-blue-900 transition-all placeholder-slate-400" 
+                  placeholder="contoh: nama@dinsos.jatim.go.id" 
+                  value={resetEmail} 
+                  onChange={e => setResetEmail(e.target.value)} 
+                />
+              </div>
+              <div className="pt-2 flex justify-end gap-3">
+                <button 
+                  type="button" 
+                  onClick={() => { setForgotModalOpen(false); setResetEmail(''); }} 
+                  className="px-4 py-2.5 text-xs font-bold text-slate-600 bg-slate-100 rounded-xl hover:bg-slate-200 transition-colors"
+                >
+                  Batal
+                </button>
+                <button 
+                  disabled={sendingReset} 
+                  type="submit" 
+                  className="px-5 py-2.5 text-xs font-bold text-white bg-blue-900 rounded-xl hover:bg-blue-800 disabled:opacity-70 shadow-lg shadow-blue-900/10 transition-all"
+                >
+                  {sendingReset ? 'Mengirim...' : 'Kirim Link Pemulihan'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   )
 }
