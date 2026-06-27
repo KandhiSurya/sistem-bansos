@@ -45,7 +45,8 @@ const mockTileLayer = {
 const mockMap = {
   setView: jest.fn().mockReturnThis(),
   eachLayer: jest.fn(),
-  remove: jest.fn()
+  remove: jest.fn(),
+  on: jest.fn()
 };
 
 global.window.L = {

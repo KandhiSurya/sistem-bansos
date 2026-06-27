@@ -46,7 +46,8 @@ const mockTileLayer = {
 const mockMap = {
   setView: jest.fn().mockReturnThis(),
   eachLayer: jest.fn(),
-  remove: jest.fn()
+  remove: jest.fn(),
+  on: jest.fn()
 };
 
 global.window.L = {
@@ -62,6 +63,30 @@ jest.mock('nodemailer', () => ({
   createTransport: jest.fn().mockImplementation(() => ({
     sendMail: mockNodemailerSendMail
   }))
+}));
+
+// Mock xlsx library
+jest.mock('xlsx', () => ({
+  read: jest.fn().mockReturnValue({
+    SheetNames: ['Sheet1'],
+    Sheets: { Sheet1: {} }
+  }),
+  utils: {
+    sheet_to_json: jest.fn().mockReturnValue([
+      {
+        NIK: '3511111111119999',
+        'No. KK': '3511111111118888',
+        NAMA: 'Excel Bidang Warga, 3511111111119999',
+        ALAMAT: 'Jl. Excel Bidang No. 9',
+        KEC: 'Manyar',
+        'DESA/KEL': 'Suci',
+        Pekerjaan: 'PNS',
+        Pendapatan: 'Rp 2.000.000',
+        Tanggungan: 3,
+        KAB: 'KAB. GRESIK'
+      }
+    ])
+  }
 }));
 
 describe('Modul Bidang Provinsi (User Stories)', () => {
@@ -232,7 +257,7 @@ describe('Modul Bidang Provinsi (User Stories)', () => {
     });
 
     it('status update jadi disetujui dan notif email kepanggil', async () => {
-      const mockPayload = { id: 'BANSOS-01', nama_lengkap: 'Yoga', status: 'Menunggu' };
+      const mockPayload = { id: 'BANSOS-01', nama_lengkap: 'Yoga', status: 'Menunggu Validasi' };
       const mockLayananEmail = jest.fn().mockResolvedValue(true);
 
       const hasil = await prosesVerifikasi(mockPayload, 'Disetujui', mockLayananEmail);
@@ -499,14 +524,17 @@ describe('Modul Bidang Provinsi (User Stories)', () => {
       const toggleBtn = screen.getByRole('button', { name: /Aktif/i });
       fireEvent.click(toggleBtn);
 
-      expect(screen.getByText('Ubah Keaktifan\?')).toBeInTheDocument();
+      expect(screen.getByText('Nonaktifkan Penerima Bantuan\?')).toBeInTheDocument();
+      
+      const promptInput = screen.getByPlaceholderText('Ketik alasan...');
+      fireEvent.change(promptInput, { target: { value: 'Graduasi Mandiri' } });
       
       const okBtn = screen.getByRole('button', { name: 'OK' });
       fireEvent.click(okBtn);
 
       await waitFor(() => {
         expect(supabase.from).toHaveBeenCalledWith('pengajuan_bantuan');
-        expect(mockUpdateQuery.update).toHaveBeenCalledWith({ status_penerima: 'Nonaktif' });
+        expect(mockUpdateQuery.update).toHaveBeenCalledWith({ status_penerima: 'Nonaktif', alasan_nonaktif: 'Graduasi Mandiri' });
         expect(defaultProps.fetchRealtimeData).toHaveBeenCalled();
       });
     });
@@ -515,7 +543,7 @@ describe('Modul Bidang Provinsi (User Stories)', () => {
   describe('BD-06: Dasbor Provinsi', () => {
     it('akumulasi total semua data se-provinsi kehitung bener', () => {
       const mockSemuaData = [
-        { status: 'Menunggu' },
+        { status: 'Menunggu Validasi' },
         { status: 'Disetujui' },
         { status: 'Disetujui' },
         { status: 'Perlu Revisi' },
@@ -612,5 +640,7 @@ describe('Modul Bidang Provinsi (User Stories)', () => {
       });
     });
   });
+
+
 
 });

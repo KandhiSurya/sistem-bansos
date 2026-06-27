@@ -47,13 +47,15 @@ jest.mock('xlsx', () => ({
   utils: {
     sheet_to_json: jest.fn().mockReturnValue([
       {
-        nik: '3512345678909999',
-        no_kk: '3512345678908888',
-        nama_lengkap: 'Excel Imported Warga',
-        alamat: 'Jl. Excel Raya No. 9',
-        pekerjaan: 'Swasta',
-        pendapatan: 'Rp 1.000.000 - Rp 2.000.000',
-        tanggungan: 1
+        NIK: '3512345678909999',
+        'No. KK': '3512345678908888',
+        NAMA: 'Excel Imported Warga, 3512345678909999',
+        ALAMAT: 'Jl. Excel Raya No. 9',
+        KEC: 'Gubeng',
+        'DESA/KEL': 'Airlangga',
+        Pekerjaan: 'Swasta',
+        Pendapatan: 'Rp 1.000.000 - Rp 2.000.000',
+        Tanggungan: 1
       }
     ])
   }
@@ -136,7 +138,7 @@ describe('Modul Operator Daerah (User Stories)', () => {
       expect(payload.nama_lengkap).toBe('Yoga Atmadja');
       expect(payload.wilayah_id).toBe('KK-SUR'); 
       expect(payload.foto_ktp).toBe('https://storage.supabase.com/ktp.jpg');
-      expect(payload.status).toBe('Menunggu');
+      expect(payload.status).toBe('Menunggu Validasi');
     });
 
     it('validasi NIK & No. KK menolak input jika bukan 16 digit angka', () => {
@@ -385,7 +387,7 @@ describe('Modul Operator Daerah (User Stories)', () => {
 
     it('sistem mengunci akses edit jika data sudah disetujui', () => {
       expect(cekBisaRevisi('Perlu Revisi')).toBe(true);
-      expect(cekBisaRevisi('Menunggu')).toBe(true);
+      expect(cekBisaRevisi('Menunggu Validasi')).toBe(true);
       expect(cekBisaRevisi('Disetujui')).toBe(false);
     });
 
@@ -398,7 +400,7 @@ describe('Modul Operator Daerah (User Stories)', () => {
       expect(payloadRevisi.id).toBe(10);
       expect(payloadRevisi.nik).toBe('1234567890123456'); 
       expect(payloadRevisi.foto_rumah).toBe('https://link.baru/rumah.jpg'); 
-      expect(payloadRevisi.status).toBe('Menunggu'); 
+      expect(payloadRevisi.status).toBe('Menunggu Validasi'); 
       expect(typeof payloadRevisi.updated_at).toBe('string');
     });
 
@@ -444,9 +446,12 @@ describe('Modul Operator Daerah (User Stories)', () => {
     });
 
     it('menangani unggahan Excel dengan sukses', async () => {
-      supabase.from.mockReturnValueOnce({
+      const mockChain = {
+        select: jest.fn().mockReturnThis(),
+        in: jest.fn().mockResolvedValue({ data: [], error: null }),
         insert: jest.fn().mockResolvedValue({ error: null })
-      });
+      };
+      supabase.from.mockReturnValue(mockChain);
 
       render(<BansosHistory {...defaultProps} />);
       
@@ -471,13 +476,55 @@ describe('Modul Operator Daerah (User Stories)', () => {
         expect(defaultProps.initData).toHaveBeenCalled();
       });
     });
+
+    it('menolak unggahan Excel jika terdapat kabupaten/kota yang tidak sesuai wilayah operator', async () => {
+      const { utils } = require('xlsx');
+      utils.sheet_to_json.mockReturnValueOnce([
+        {
+          NIK: '3512345678909999',
+          'No. KK': '3512345678908888',
+          NAMA: 'Warga Daerah Lain',
+          ALAMAT: 'Jl. Mismatch No. 1',
+          KEC: 'Wonokromo',
+          'DESA/KEL': 'Darmo',
+          Pekerjaan: 'Swasta',
+          Pendapatan: 'Rp 1.000.000 - Rp 2.000.000',
+          Tanggungan: 1,
+          'Kabupaten/Kota': 'Surabaya'
+        }
+      ]);
+
+      render(<BansosHistory {...defaultProps} />);
+      
+      const fileInput = screen.getByLabelText(/Impor Masal Excel/i);
+      const dummyFile = new File([''], 'test.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+      const mockFileReaderInstance = {
+        readAsArrayBuffer: jest.fn().mockImplementation(function() {
+          if (this.onload) {
+            this.onload({ target: { result: new ArrayBuffer(0) } });
+          }
+        })
+      };
+      jest.spyOn(window, 'FileReader').mockImplementation(() => mockFileReaderInstance);
+
+      fireEvent.change(fileInput, { target: { files: [dummyFile] } });
+
+      await waitFor(() => {
+        expect(toast.error).toHaveBeenCalledWith(
+          expect.stringContaining('Gagal impor: Terdapat 1 data dengan kabupaten/kota yang tidak sesuai dengan wilayah Anda (Kediri)'),
+          expect.any(Object)
+        );
+        expect(supabase.from).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('KK-03: Statistik Dasbor', () => {
     it('kalkulasi total data menunggu dan disetujui akurat', () => {
       const mockDataLokal = [
-        { status: 'Menunggu' },
-        { status: 'Menunggu' },
+        { status: 'Menunggu Validasi' },
+        { status: 'Menunggu Validasi' },
         { status: 'Disetujui' },
         { status: 'Perlu Revisi' },
         { status: 'Disetujui' }

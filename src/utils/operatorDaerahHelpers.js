@@ -15,7 +15,7 @@ export const formatPayloadPengajuan = (nik, namaLengkap, kota, urlsDokumen, prof
     foto_diri: urlsDokumen.diri || null,
     foto_rumah: urlsDokumen.rumah || null,
     foto_pekerjaan: urlsDokumen.pekerjaan || null,
-    status: 'Menunggu',
+    status: 'Menunggu Validasi',
     created_at: new Date().toISOString(),
     agama: profilTambahan.agama || null,
     status_pernikahan: profilTambahan.status_pernikahan || null,
@@ -33,7 +33,7 @@ export const filterRiwayatLokal = (semuaPengajuan = [], wilayahOperatorAktif) =>
 export const hitungStatistikLokal = (dataLokal = []) => {
   return dataLokal.reduce((acc, curr) => {
     acc.total += 1;
-    if (curr.status === 'Menunggu') acc.menunggu += 1;
+    if (curr.status === 'Menunggu Validasi') acc.menunggu += 1;
     if (curr.status === 'Disetujui') acc.disetujui += 1;
     if (curr.status === 'Perlu Revisi') acc.revisi += 1;
     return acc;
@@ -68,7 +68,7 @@ export const validasiFileGambar = (namaFile, ukuranBytes) => {
 
 // KK-02: Pengecekan apakah data boleh diedit/direvisi operator
 export const cekBisaRevisi = (status) => {
-  return status === 'Perlu Revisi' || status === 'Menunggu';
+  return status === 'Perlu Revisi' || status === 'Menunggu Validasi';
 };
 
 // KK-02: Memformat payload saat operator menyimpan hasil revisi
@@ -76,7 +76,7 @@ export const formatPayloadRevisi = (dataLama, dataBaru) => {
   return {
     ...dataLama,
     ...dataBaru,
-    status: 'Menunggu', // Dikembalikan ke Menunggu agar diperiksa ulang Bidang
+    status: 'Menunggu Validasi', // Dikembalikan ke Menunggu Validasi agar diperiksa ulang Bidang
     updated_at: new Date().toISOString()
   };
 };

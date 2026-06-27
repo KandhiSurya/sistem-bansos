@@ -94,6 +94,7 @@ const mockEq = jest.fn().mockReturnThis();
 const mockNeq = jest.fn().mockReturnThis();
 const mockIlike = jest.fn().mockReturnThis();
 const mockNot = jest.fn().mockReturnThis();
+const mockIn = jest.fn().mockReturnThis();
 
 const mockSingleChain = {
   select: mockSelect,
@@ -101,6 +102,7 @@ const mockSingleChain = {
   neq: mockNeq,
   ilike: mockIlike,
   not: mockNot,
+  in: mockIn,
   maybeSingle: mockMaybeSingle,
   single: mockSingle,
   insert: mockInsert,

@@ -4,6 +4,8 @@ import toast from 'react-hot-toast'
 import ExcelJS from 'exceljs'
 import { saveAs } from 'file-saver'
 import { KOORDINAT_JATIM, hitungStatistikPerWilayah } from '@/utils/mapHelpers'
+import { getDirectImageUrl } from '@/utils/imageHelpers'
+
 
 const getInitials = (name) => {
   if (!name) return '?'
@@ -185,6 +187,16 @@ export default function BansosMonitoring({
       attribution: '&copy; OpenStreetMap'
     }).addTo(map);
 
+    if (typeof map.on === 'function') {
+      map.on('popupclose', () => {
+        setTimeout(() => {
+          if (!map._popup || !map.hasLayer(map._popup)) {
+            setFilterWilayah('Semua');
+          }
+        }, 50);
+      });
+    }
+
     setTimeout(() => setMapInstance(map), 0);
 
     return () => {
@@ -294,10 +306,10 @@ export default function BansosMonitoring({
       <div class="images-section avoid-break">
         <h3>LAMPIRAN DOKUMEN FOTO</h3>
         <div class="images-flex">
-          <div class="img-card avoid-break"><p>FOTO KTP</p><img src="${item.foto_ktp || ''}" onerror="this.style.display='none'" /></div>
-          <div class="img-card avoid-break"><p>FOTO DIRI</p><img src="${item.foto_diri || ''}" onerror="this.style.display='none'" /></div>
-          <div class="img-card avoid-break"><p>FOTO RUMAH</p><img src="${item.foto_rumah || ''}" onerror="this.style.display='none'" /></div>
-          <div class="img-card avoid-break"><p>FOTO PEKERJAAN</p><img src="${item.foto_pekerjaan || ''}" onerror="this.style.display='none'" /></div>
+          <div class="img-card avoid-break"><p>FOTO KTP</p><img src="${getDirectImageUrl(item.foto_ktp) || ''}" onerror="this.style.display='none'" /></div>
+          <div class="img-card avoid-break"><p>FOTO DIRI</p><img src="${getDirectImageUrl(item.foto_diri) || ''}" onerror="this.style.display='none'" /></div>
+          <div class="img-card avoid-break"><p>FOTO RUMAH</p><img src="${getDirectImageUrl(item.foto_rumah) || ''}" onerror="this.style.display='none'" /></div>
+          <div class="img-card avoid-break"><p>FOTO PEKERJAAN</p><img src="${getDirectImageUrl(item.foto_pekerjaan) || ''}" onerror="this.style.display='none'" /></div>
         </div>
       </div>
       <script>window.onload = function() { setTimeout(function() { window.print(); }, 1500); }</script>
@@ -466,6 +478,9 @@ export default function BansosMonitoring({
                  <div><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Program & Lokasi Wilayah</p><p className="text-sm font-bold text-blue-900 uppercase mt-1.5">{selectedDetailItem.jenis_bantuan} <span className="text-slate-400 font-normal ml-1">({selectedDetailItem.kabupaten_kota || 'Belum diatur'})</span></p></div>
                  <div className="col-span-2"><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Alamat Lengkap</p><p className="text-sm text-slate-700 leading-snug font-medium">{selectedDetailItem.alamat || '-'}</p></div>
                  <div className="col-span-2"><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Catatan Tambahan</p><p className="text-sm text-slate-700 leading-snug font-medium">{selectedDetailItem.catatan_tambahan || '-'}</p></div>
+                 {selectedDetailItem.status_penerima === 'Nonaktif' && (
+                    <div className="col-span-2"><p className="text-[11px] font-bold text-rose-500 uppercase tracking-wider mb-1">Alasan Penonaktifan (Graduasi)</p><p className="text-sm text-rose-700 leading-snug font-bold italic">&quot;{selectedDetailItem.alasan_nonaktif || '-'}&quot;</p></div>
+                  )}
               </div>
 
               <div>
@@ -474,7 +489,7 @@ export default function BansosMonitoring({
                   {['foto_ktp', 'foto_diri', 'foto_rumah', 'foto_pekerjaan'].map((fotoKey, idx) => (
                     selectedDetailItem[fotoKey] ? (
                       <div key={idx} className="relative h-32 rounded-lg overflow-hidden group cursor-pointer border border-slate-200 shadow-sm" onClick={() => window.open(selectedDetailItem[fotoKey], '_blank')}>
-                        <img src={selectedDetailItem[fotoKey]} alt={fotoKey} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                        <img src={getDirectImageUrl(selectedDetailItem[fotoKey])} alt={fotoKey} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
                         <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                           <span className="text-white text-[10px] font-bold uppercase tracking-wider">Buka Ukuran Asli</span>
                         </div>

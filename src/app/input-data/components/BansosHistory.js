@@ -5,6 +5,8 @@ import { read, utils } from 'xlsx'
 import ExcelJS from 'exceljs'
 import { saveAs } from 'file-saver'
 import { supabase } from '@/lib/supabaseClient'
+import { getDirectImageUrl } from '@/utils/imageHelpers'
+
 
 const getInitials = (name) => {
   if (!name) return '?'
@@ -208,22 +210,22 @@ export default function BansosHistory({
 
             // Filter baris kosong atau baris yang tidak memiliki NIK dan Nama Lengkap
             validRows = rowsData.filter(row => {
-              const hasName = row['nama_lengkap'] || row['Nama Lengkap']
-              const hasNik = row['nik'] || row['NIK']
+              const hasName = row['NAMA'] || row['nama_lengkap'] || row['Nama Lengkap']
+              const hasNik = row['NIK'] || row['nik']
               return hasName && hasNik
             })
           } else {
             // Fallback ke utils.sheet_to_json untuk data mock testing
             const jsonData = utils.sheet_to_json(worksheet || {})
             validRows = jsonData.filter(row => {
-              const hasName = row.nama_lengkap || row['Nama Lengkap']
-              const hasNik = row.nik || row['NIK']
+              const hasName = row['NAMA'] || row.nama_lengkap || row['Nama Lengkap']
+              const hasNik = row['NIK'] || row.nik
               return hasName && hasNik
             })
           }
 
           if (validRows.length === 0) { 
-            toast.error("Tidak ada data valid yang dapat diimpor! Pastikan kolom 'Nama Lengkap' (atau 'nama_lengkap') dan 'NIK' (atau 'nik') terisi.", { id: loadingToast }); 
+            toast.error("Tidak ada data valid yang dapat diimpor! Pastikan kolom 'NAMA' (atau 'nama_lengkap') dan 'NIK' terisi.", { id: loadingToast }); 
             setIsImporting(false); 
             return 
           }
@@ -239,11 +241,50 @@ export default function BansosHistory({
             return null
           }
 
-          const formattedData = validRows.map((row) => {
-            const nikVal = row['nik'] || row['NIK'] || '';
-            const namaVal = row['nama_lengkap'] || row['Nama Lengkap'] || '';
+          const invalidRows = []
+          const normalizeKabKota = (str) => {
+            if (!str) return ''
+            return String(str)
+              .replace(/^(kota|kabupaten|kab\.)\s+/i, '')
+              .replace(/\s+/g, '')
+              .toLowerCase()
+          }
+
+          const formattedData = validRows.map((row, index) => {
+            const nikVal = row['NIK'] || row['nik'] || '';
+            let namaVal = row['NAMA'] || row['nama_lengkap'] || row['Nama Lengkap'] || '';
+            
+            // Pisahkan NIK dari Nama jika tergabung dengan koma (contoh: "ABD DJALAL, 3507...")
+            if (typeof namaVal === 'string' && namaVal.includes(',')) {
+              namaVal = namaVal.split(',')[0].trim();
+            }
+
+            const kabKotaRowVal = row['kabupaten_kota'] || row['Kabupaten/Kota'] || row['Kabupaten'] || row['Kota'] || row['Wilayah'] || row['kabupaten'] || row['kota'] || row['wilayah'] || null;
+            if (kabKotaRowVal) {
+              const rowNorm = normalizeKabKota(kabKotaRowVal)
+              const profileNorm = normalizeKabKota(userProfile.kabupaten_kota)
+              if (rowNorm !== profileNorm) {
+                invalidRows.push({
+                  index: index + 2, // Baris ke-2 dst. karena header baris ke-1
+                  nik: String(nikVal).trim(),
+                  nama: String(namaVal).trim(),
+                  wilayah: String(kabKotaRowVal).trim()
+                })
+              }
+            }
+
             const noKkVal = row['no_kk'] || row['No. KK'] || row['No KK'] || null;
-            const alamatVal = row['alamat'] || row['Alamat'] || '-';
+            
+            let alamatVal = row['ALAMAT'] || row['alamat'] || row['Alamat'] || '-';
+            const desaVal = row['DESA/KEL'] || '';
+            const kecVal = row['KEC'] || '';
+            if (desaVal || kecVal) {
+              const parts = [alamatVal];
+              if (desaVal) parts.push(`Kel/Desa. ${desaVal}`);
+              if (kecVal) parts.push(`Kec. ${kecVal}`);
+              alamatVal = parts.join(', ');
+            }
+            
             const pekerjaanVal = row['pekerjaan'] || row['Pekerjaan'] || '-';
             const pendapatanVal = row['pendapatan'] || row['Pendapatan'] || '< Rp 500.000';
             const tanggunganVal = row['tanggungan'] || row['Tanggungan'] || 0;
@@ -263,8 +304,8 @@ export default function BansosHistory({
             const fotoPekerjaanVal = row['foto_pekerjaan'] || row['Link Foto Pekerjaan'] || null;
 
             return {
-              nik: String(nikVal).trim(), 
-              no_kk: noKkVal ? String(noKkVal).trim() : null, 
+              nik: String(nikVal).replace(/['"]/g, '').trim().substring(0, 16), 
+              no_kk: noKkVal ? String(noKkVal).replace(/['"]/g, '').trim().substring(0, 16) : null, 
               nama_lengkap: String(namaVal).trim(), 
               alamat: String(alamatVal).trim(), 
               pekerjaan: String(pekerjaanVal).trim(), 
@@ -287,11 +328,75 @@ export default function BansosHistory({
             }
           })
 
-          const { error } = await supabase.from('pengajuan_bantuan').insert(formattedData)
-          if (error) throw error
+          if (invalidRows.length > 0) {
+            const firstInvalid = invalidRows[0]
+            toast.error(
+              `Gagal impor: Terdapat ${invalidRows.length} data dengan kabupaten/kota yang tidak sesuai dengan wilayah Anda (${userProfile.kabupaten_kota}). Baris ${firstInvalid.index} (Nama: ${firstInvalid.nama}) terdeteksi wilayah "${firstInvalid.wilayah}".`,
+              { id: loadingToast, duration: 8000 }
+            )
+            setIsImporting(false)
+            return
+          }
 
-          toast.success(`${validRows.length} data berhasil diimpor!`, { id: loadingToast })
-          await catatLog("Import Excel", `Mengimpor data bansos warga secara massal sebanyak ${validRows.length} data.`)
+          // 1. Hilangkan baris yang NIK-nya kembar di dalam file Excel itu sendiri (Deduplikasi Internal)
+          const seenNiks = new Set()
+          const uniqueExcelData = []
+          let internalDuplicateCount = 0
+
+          formattedData.forEach((row) => {
+            if (seenNiks.has(row.nik)) {
+              internalDuplicateCount++
+            } else {
+              seenNiks.add(row.nik)
+              uniqueExcelData.push(row)
+            }
+          })
+
+          // 2. Cek NIK mana saja yang sudah ada di database sebelum memasukkan data
+          let databaseExistingNiks = new Set()
+          const niksToCheck = uniqueExcelData.map(d => d.nik)
+          
+          if (niksToCheck.length > 0) {
+            const { data: dbExisting, error: dbError } = await supabase
+              .from('pengajuan_bantuan')
+              .select('nik')
+              .in('nik', niksToCheck)
+
+            if (dbError) throw dbError
+
+            if (dbExisting) {
+              dbExisting.forEach(row => databaseExistingNiks.add(row.nik))
+            }
+          }
+
+          // 3. Masukkan hanya data yang NIK-nya belum terdaftar
+          const finalDataToInsert = uniqueExcelData.filter(row => !databaseExistingNiks.has(row.nik))
+          const databaseDuplicateCount = uniqueExcelData.length - finalDataToInsert.length
+          const totalSkipped = internalDuplicateCount + databaseDuplicateCount
+
+          // 4. Lakukan insert jika ada data yang valid
+          if (finalDataToInsert.length > 0) {
+            const { error } = await supabase.from('pengajuan_bantuan').insert(finalDataToInsert)
+            if (error) throw error
+
+            // 5. Tampilkan notifikasi ringkas ke pengguna
+            toast.success(
+              `Impor selesai! ${finalDataToInsert.length} data berhasil diimpor!${
+                totalSkipped > 0 ? ` ${totalSkipped} data dilewati karena NIK terdaftar/duplikat.` : ''
+              }`,
+              { id: loadingToast, duration: 6000 }
+            )
+            await catatLog(
+              "Import Excel", 
+              `Mengimpor data bansos warga secara massal sebanyak ${finalDataToInsert.length} data (dilewati ${totalSkipped} duplikat).`
+            )
+          } else {
+            toast.error(
+              `Gagal impor: Semua data (${totalSkipped} data) dilewati karena NIK sudah terdaftar atau duplikat.`,
+              { id: loadingToast, duration: 6000 }
+            )
+          }
+
           await initData() 
         } catch (innerError) {
           toast.error("Gagal mengimpor: " + (innerError.message || innerError.details || JSON.stringify(innerError)), { id: loadingToast })
@@ -351,10 +456,10 @@ export default function BansosHistory({
       <div class="images-section avoid-break">
         <h3>LAMPIRAN DOKUMEN FOTO</h3>
         <div class="images-flex">
-          <div class="img-card avoid-break"><p>FOTO KTP</p><img src="${item.foto_ktp || ''}" onerror="this.style.display='none'" /></div>
-          <div class="img-card avoid-break"><p>FOTO DIRI</p><img src="${item.foto_diri || ''}" onerror="this.style.display='none'" /></div>
-          <div class="img-card avoid-break"><p>FOTO RUMAH</p><img src="${item.foto_rumah || ''}" onerror="this.style.display='none'" /></div>
-          <div class="img-card avoid-break"><p>FOTO PEKERJAAN</p><img src="${item.foto_pekerjaan || ''}" onerror="this.style.display='none'" /></div>
+          <div class="img-card avoid-break"><p>FOTO KTP</p><img src="${getDirectImageUrl(item.foto_ktp) || ''}" onerror="this.style.display='none'" /></div>
+          <div class="img-card avoid-break"><p>FOTO DIRI</p><img src="${getDirectImageUrl(item.foto_diri) || ''}" onerror="this.style.display='none'" /></div>
+          <div class="img-card avoid-break"><p>FOTO RUMAH</p><img src="${getDirectImageUrl(item.foto_rumah) || ''}" onerror="this.style.display='none'" /></div>
+          <div class="img-card avoid-break"><p>FOTO PEKERJAAN</p><img src="${getDirectImageUrl(item.foto_pekerjaan) || ''}" onerror="this.style.display='none'" /></div>
         </div>
       </div>
       <script>window.onload = function() { setTimeout(function() { window.print(); }, 1500); }</script>
@@ -487,7 +592,7 @@ export default function BansosHistory({
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                        {[{title: 'KTP', src: selectedItem.foto_ktp}, {title: 'Diri', src: selectedItem.foto_diri}, {title: 'Rumah', src: selectedItem.foto_rumah}, {title: 'Pekerjaan', src: selectedItem.foto_pekerjaan}].map((foto, idx) => (
                           <div key={idx} onClick={() => foto.src && window.open(foto.src, '_blank')} className="group relative h-32 bg-slate-50 rounded-lg overflow-hidden border border-slate-200 cursor-pointer hover:shadow-md transition-all">
-                             {foto.src ? <img src={foto.src} alt={foto.title} className="w-full h-full object-cover transition duration-500 group-hover:scale-105" /> : <div className="flex items-center justify-center h-full text-[10px] font-bold uppercase text-slate-400">{foto.title} Kosong</div>}
+                             {foto.src ? <img src={getDirectImageUrl(foto.src)} alt={foto.title} className="w-full h-full object-cover transition duration-500 group-hover:scale-105" /> : <div className="flex items-center justify-center h-full text-[10px] font-bold uppercase text-slate-400">{foto.title} Kosong</div>}
                              <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><span className="text-white text-[10px] font-bold uppercase tracking-wider">Buka Dokumen</span></div>
                           </div>
                        ))}

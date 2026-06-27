@@ -42,7 +42,7 @@ export const toggleStatusKeaktifan = (dataArray = [], targetId) => {
 export const hitungStatistikProvinsi = (semuaData = []) => {
   return semuaData.reduce((acc, curr) => {
     acc.total += 1;
-    if (curr.status === 'Menunggu') acc.menunggu += 1;
+    if (curr.status === 'Menunggu Validasi') acc.menunggu += 1;
     if (curr.status === 'Disetujui') acc.disetujui += 1;
     if (curr.status === 'Ditolak' || curr.status === 'Perlu Revisi') acc.ditolakAtauRevisi += 1;
     return acc;

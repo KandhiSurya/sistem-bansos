@@ -2,6 +2,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
+import toast from 'react-hot-toast'
 
 // Import Sub-Komponen Modular
 import StatCards from './components/StatCards'
@@ -17,6 +18,8 @@ export default function ValidasiPage() {
   
   const [stats, setStats] = useState({ total: 0, perluValidasi: 0, disetujui: 0, ditolak: 0, pkh: 0, kip: 0, fakmis: 0 })
   const [activeTab, setActiveTab] = useState('Pending') 
+  
+  const [userProfile, setUserProfile] = useState(null)
   
   // State Pemicu Ekspor Excel (dari Header)
   const [exportExcelTrigger, setExportExcelTrigger] = useState(false)
@@ -45,7 +48,8 @@ export default function ValidasiPage() {
       
       setCurrentUserEmail(user.email) 
 
-      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+      const { data: profile } = await supabase.from('profiles').select('*').eq('id', user.id).single()
+      setUserProfile(profile)
       if (profile?.role !== 'bidang') { router.push('/'); return }
       
       // Panggil data awal
@@ -133,7 +137,15 @@ export default function ValidasiPage() {
       <main className="flex-1 flex flex-col h-screen overflow-hidden">
         <header className="bg-white border-b border-slate-200 px-8 py-5 flex justify-between items-center shrink-0">
           <h2 className="text-xl font-extrabold text-slate-800">{activeTab === 'Pending' ? 'Menunggu Validasi Provinsi' : 'Arsip Keseluruhan Data'}</h2>
-          <button onClick={() => setExportExcelTrigger(true)} className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm flex items-center gap-2 transition-colors"><svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg> Unduh Rekap Excel</button>
+          <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setExportExcelTrigger(true)} 
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-lg text-xs font-bold shadow-sm flex items-center gap-2 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>
+              Unduh Rekap Excel
+            </button>
+          </div>
         </header>
 
         <div className="flex-1 overflow-y-auto p-8 space-y-8 animate-fadeIn">
@@ -145,9 +157,11 @@ export default function ValidasiPage() {
           <VerificationQueue 
             dataBansos={dataBansos}
             activeTab={activeTab}
+            setActiveTab={setActiveTab}
             fetchRealtimeData={fetchRealtimeData}
             catatLog={catatLog}
             currentUserEmail={currentUserEmail}
+            userProfile={userProfile}
             exportExcelTrigger={exportExcelTrigger}
             setExportExcelTrigger={setExportExcelTrigger}
           />

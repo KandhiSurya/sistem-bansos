@@ -3,8 +3,11 @@ import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import toast from 'react-hot-toast'
 import ExcelJS from 'exceljs'
 import { saveAs } from 'file-saver'
+import { read, utils } from 'xlsx'
 import { supabase } from '@/lib/supabaseClient'
 import { KOORDINAT_JATIM, hitungStatistikPerWilayah } from '@/utils/mapHelpers'
+import { getDirectImageUrl } from '@/utils/imageHelpers'
+
 
 const getInitials = (name) => {
   if (!name) return '?'
@@ -33,6 +36,8 @@ export default function VerificationQueue({
   fetchRealtimeData,
   catatLog,
   currentUserEmail,
+  userProfile,
+  setActiveTab,
   exportExcelTrigger,
   setExportExcelTrigger
 }) {
@@ -173,13 +178,17 @@ export default function VerificationQueue({
     }
   }
 
-  const executeToggleStatus = async (item, newStatus) => {
+  const executeToggleStatus = async (item, newStatus, alasan = null) => {
       const toastId = toast.loading("Mengubah status keaktifan...");
       try {
-          const { error } = await supabase.from('pengajuan_bantuan').update({ status_penerima: newStatus }).eq('id', item.id);
+          const updateData = { 
+            status_penerima: newStatus,
+            alasan_nonaktif: newStatus === 'Nonaktif' ? alasan : null
+          };
+          const { error } = await supabase.from('pengajuan_bantuan').update(updateData).eq('id', item.id);
           if(error) throw error;
           toast.success(`Berhasil di-${newStatus.toLowerCase()}kan!`, { id: toastId }); 
-          await catatLog("Ubah Status Aktif", `Mengubah status keaktifan penerima bansos NIK ${item.nik} menjadi ${newStatus}.`)
+          await catatLog("Ubah Status Aktif", `Mengubah status keaktifan penerima bansos NIK ${item.nik} menjadi ${newStatus}.${alasan ? ' Alasan: ' + alasan : ''}`)
           await fetchRealtimeData();
       } catch (error) { 
         toast.error("Gagal mengubah status: " + error.message, { id: toastId }); 
@@ -260,10 +269,10 @@ export default function VerificationQueue({
       <div class="images-section avoid-break">
         <h3>LAMPIRAN DOKUMEN FOTO</h3>
         <div class="images-flex">
-          <div class="img-card avoid-break"><p>FOTO KTP</p><img src="${item.foto_ktp || ''}" onerror="this.style.display='none'" /></div>
-          <div class="img-card avoid-break"><p>FOTO DIRI</p><img src="${item.foto_diri || ''}" onerror="this.style.display='none'" /></div>
-          <div class="img-card avoid-break"><p>FOTO RUMAH</p><img src="${item.foto_rumah || ''}" onerror="this.style.display='none'" /></div>
-          <div class="img-card avoid-break"><p>FOTO PEKERJAAN</p><img src="${item.foto_pekerjaan || ''}" onerror="this.style.display='none'" /></div>
+          <div class="img-card avoid-break"><p>FOTO KTP</p><img src="${getDirectImageUrl(item.foto_ktp) || ''}" onerror="this.style.display='none'" /></div>
+          <div class="img-card avoid-break"><p>FOTO DIRI</p><img src="${getDirectImageUrl(item.foto_diri) || ''}" onerror="this.style.display='none'" /></div>
+          <div class="img-card avoid-break"><p>FOTO RUMAH</p><img src="${getDirectImageUrl(item.foto_rumah) || ''}" onerror="this.style.display='none'" /></div>
+          <div class="img-card avoid-break"><p>FOTO PEKERJAAN</p><img src="${getDirectImageUrl(item.foto_pekerjaan) || ''}" onerror="this.style.display='none'" /></div>
         </div>
       </div>
       <script>window.onload = function() { setTimeout(function() { window.print(); }, 1500); }</script>
@@ -313,6 +322,16 @@ export default function VerificationQueue({
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       attribution: '&copy; OpenStreetMap'
     }).addTo(map);
+
+    if (typeof map.on === 'function') {
+      map.on('popupclose', () => {
+        setTimeout(() => {
+          if (!map._popup || !map.hasLayer(map._popup)) {
+            setFilterWilayah('Semua');
+          }
+        }, 50);
+      });
+    }
 
     mapRef.current = map;
     setMapInstance(map);
@@ -403,9 +422,9 @@ export default function VerificationQueue({
               </div>
             )}
          </div>
-         <div className="relative w-full md:w-56">
+          <div className="relative w-full md:w-56">
             <input type="text" placeholder="Cari NIK / Nama..." className="pl-3 pr-4 py-2 bg-white border border-slate-300 rounded-lg text-xs font-medium focus:border-blue-900 outline-none w-full transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
-         </div>
+          </div>
       </div>
 
       {/* Peta Sebaran Real-time */}
@@ -456,13 +475,47 @@ export default function VerificationQueue({
                     <td className="px-6 py-4 align-middle">{getStatusBadge(item.status)}</td>
                     <td className="px-6 py-4 align-middle">
                         {item.status === 'Disetujui' ? (
-                        <button onClick={() => {
-                                const newStatus = (item.status_penerima || 'Aktif') === 'Aktif' ? 'Nonaktif' : 'Aktif';
-                                setCustomAlert({ isOpen: true, title: 'Ubah Keaktifan?', message: "Apakah Anda yakin ingin mengganti status keaktifan warga ini?", type: 'confirm', confirmLabel: 'OK', onConfirm: () => { setCustomAlert({ isOpen: false }); executeToggleStatus(item, newStatus); } })
-                            }} className="group flex items-center gap-2 focus:outline-none">
-                            <div className={`w-9 h-5 flex items-center rounded-full p-1 duration-300 ease-in-out ${ (item.status_penerima || 'Aktif') === 'Aktif' ? 'bg-blue-900' : 'bg-slate-300' }`}><div className={`bg-white w-3 h-3 rounded-full shadow-sm transform duration-300 ease-in-out ${ (item.status_penerima || 'Aktif') === 'Aktif' ? 'translate-x-4' : '' }`}></div></div>
-                            <span className="text-[10px] font-bold uppercase text-slate-500">{(item.status_penerima || 'Aktif')}</span>
-                        </button>
+                        <div className="flex flex-col gap-1">
+                          <button onClick={() => {
+                                  if ((item.status_penerima || 'Aktif') === 'Aktif') {
+                                    setCustomAlert({
+                                        isOpen: true,
+                                        title: 'Nonaktifkan Penerima Bantuan?',
+                                        message: 'Harap berikan alasan penonaktifan/graduasi warga ini:',
+                                        type: 'prompt',
+                                        confirmLabel: 'OK',
+                                        onConfirm: (alasan) => {
+                                            if (!alasan || alasan.trim() === '') {
+                                                toast.error('Alasan penonaktifan wajib diisi!');
+                                                return;
+                                            }
+                                            setCustomAlert({ isOpen: false });
+                                            executeToggleStatus(item, 'Nonaktif', alasan.trim());
+                                        }
+                                    });
+                                  } else {
+                                    setCustomAlert({
+                                        isOpen: true,
+                                        title: 'Aktifkan Kembali?',
+                                        message: 'Apakah Anda yakin ingin mengaktifkan kembali penerima bantuan ini?',
+                                        type: 'confirm',
+                                        confirmLabel: 'OK',
+                                        onConfirm: () => {
+                                            setCustomAlert({ isOpen: false });
+                                            executeToggleStatus(item, 'Aktif', null);
+                                        }
+                                    });
+                                  }
+                              }} className="group flex items-center gap-2 focus:outline-none">
+                              <div className={`w-9 h-5 flex items-center rounded-full p-1 duration-300 ease-in-out ${ (item.status_penerima || 'Aktif') === 'Aktif' ? 'bg-blue-900' : 'bg-slate-300' }`}><div className={`bg-white w-3 h-3 rounded-full shadow-sm transform duration-300 ease-in-out ${ (item.status_penerima || 'Aktif') === 'Aktif' ? 'translate-x-4' : '' }`}></div></div>
+                              <span className="text-[10px] font-bold uppercase text-slate-500">{(item.status_penerima || 'Aktif')}</span>
+                          </button>
+                          {item.status_penerima === 'Nonaktif' && item.alasan_nonaktif && (
+                            <span className="text-[10px] text-rose-600 font-medium italic truncate max-w-[120px]" title={item.alasan_nonaktif}>
+                              &quot;{item.alasan_nonaktif}&quot;
+                            </span>
+                          )}
+                        </div>
                         ) : (<span className="text-slate-300 text-[11px] italic">Menunggu</span>)}
                     </td>
                     <td className="px-6 py-4 text-right align-middle">
@@ -527,6 +580,9 @@ export default function VerificationQueue({
                     </div>
                     <div className="col-span-2"><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Alamat Lengkap Rumah</p><p className="text-sm text-slate-700 leading-snug">{selectedItem.alamat}</p></div>
                     <div className="col-span-2"><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">Catatan Tambahan</p><p className="text-sm text-slate-700 leading-snug font-medium">{selectedItem.catatan_tambahan || '-'}</p></div>
+                    {selectedItem.status_penerima === 'Nonaktif' && (
+                      <div className="col-span-2"><p className="text-[11px] font-bold text-rose-500 uppercase tracking-wider mb-1">Alasan Penonaktifan (Graduasi)</p><p className="text-sm text-rose-700 leading-snug font-bold italic">&quot;{selectedItem.alasan_nonaktif || '-'}&quot;</p></div>
+                    )}
                  </div>
 
                  <div>
@@ -534,7 +590,7 @@ export default function VerificationQueue({
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                        {[{title: 'KTP', src: selectedItem.foto_ktp}, {title: 'Diri', src: selectedItem.foto_diri}, {title: 'Rumah', src: selectedItem.foto_rumah}, {title: 'Pekerjaan', src: selectedItem.foto_pekerjaan}].map((foto, idx) => (
                           <div key={idx} onClick={() => foto.src && window.open(foto.src, '_blank')} className="group relative h-32 bg-slate-50 rounded-lg overflow-hidden border border-slate-200 cursor-pointer">
-                             {foto.src ? <img src={foto.src} alt={foto.title} className="w-full h-full object-cover transition-all group-hover:scale-105" /> : <div className="flex h-full items-center justify-center text-slate-400 text-xs">{foto.title} Kosong</div>}
+                             {foto.src ? <img src={getDirectImageUrl(foto.src)} alt={foto.title} className="w-full h-full object-cover transition-all group-hover:scale-105" /> : <div className="flex h-full items-center justify-center text-slate-400 text-xs">{foto.title} Kosong</div>}
                              <div className="absolute inset-0 bg-slate-900/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center"><span className="text-white text-[10px] font-bold uppercase">Lihat Ukuran Asli</span></div>
                           </div>
                        ))}
