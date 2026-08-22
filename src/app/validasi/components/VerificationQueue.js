@@ -43,8 +43,10 @@ export default function VerificationQueue({
 }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterProgram, setFilterProgram] = useState('Semua')
-  const [filterWaktu, setFilterWaktu] = useState('Semua')
+  const [filterWaktu, setFilterWaktu] = useState('')
   const [filterWilayah, setFilterWilayah] = useState('Semua')
+  const [filterKeaktifan, setFilterKeaktifan] = useState('Semua')
+  const [filterPendapatan, setFilterPendapatan] = useState('Semua')
   const [selectedItem, setSelectedItem] = useState(null)
   const [assignedProgram, setAssignedProgram] = useState('')
 
@@ -60,6 +62,10 @@ export default function VerificationQueue({
     return ['Semua', ...new Set(dataBansos.map(item => item.jenis_bantuan))]
   }, [dataBansos])
 
+  const uniqueWilayah = useMemo(() => {
+    return ['Semua', ...new Set(dataBansos.map(item => item.kabupaten_kota).filter(Boolean))]
+  }, [dataBansos])
+
   const filteredData = useMemo(() => {
     return dataBansos.filter(item => {
       if (activeTab === 'Pending' && item.status !== 'Menunggu Validasi') return false;
@@ -70,18 +76,27 @@ export default function VerificationQueue({
         const term = searchTerm.toLowerCase();
         if (!((item.nama_lengkap && item.nama_lengkap.toLowerCase().includes(term)) || (item.nik && item.nik.includes(term)) || (item.kabupaten_kota && item.kabupaten_kota.toLowerCase().includes(term)))) return false;
       }
-      if (filterWaktu !== 'Semua') {
-        const itemDate = new Date(item.created_at); const now = new Date();
-        if (filterWaktu === '7 Hari Terakhir') { const past7 = new Date(); past7.setDate(now.getDate() - 7); if (itemDate < past7) return false;
-        } else if (filterWaktu === 'Bulan Ini') { if (itemDate.getMonth() !== now.getMonth() || itemDate.getFullYear() !== now.getFullYear()) return false;
-        } else if (filterWaktu === 'Bulan Lalu') { let lastMonth = now.getMonth() - 1; let year = now.getFullYear(); if (lastMonth < 0) { lastMonth = 11; year -= 1; } if (itemDate.getMonth() !== lastMonth || itemDate.getFullYear() !== year) return false;
-        } else if (filterWaktu === 'Tahun Ini') { if (itemDate.getFullYear() !== now.getFullYear()) return false; }
+      if (filterWaktu) {
+        const itemLocalDate = new Date(item.created_at);
+        const year = itemLocalDate.getFullYear();
+        const month = String(itemLocalDate.getMonth() + 1).padStart(2, '0');
+        const day = String(itemLocalDate.getDate()).padStart(2, '0');
+        const itemDateString = `${year}-${month}-${day}`;
+        if (itemDateString !== filterWaktu) return false;
+      }
+      if (activeTab !== 'Pending') {
+        if (filterKeaktifan !== 'Semua') {
+          const itemActive = item.status_penerima || 'Aktif';
+          if (itemActive !== filterKeaktifan) return false;
+        }
+        if (filterPendapatan !== 'Semua') {
+          if (item.pendapatan !== filterPendapatan) return false;
+        }
       }
       return true;
     });
-  }, [dataBansos, activeTab, searchTerm, filterProgram, filterWaktu, filterWilayah]);
+  }, [dataBansos, activeTab, searchTerm, filterProgram, filterWaktu, filterWilayah, filterKeaktifan, filterPendapatan]);
 
-  // --- LOGIKA FILTER DATA KHUSUS PETA (agar marker kota lain tidak hilang saat terfilter) ---
   const dataForMap = useMemo(() => {
     return dataBansos.filter(item => {
       if (activeTab === 'Pending' && item.status !== 'Menunggu Validasi') return false;
@@ -91,16 +106,26 @@ export default function VerificationQueue({
         const term = searchTerm.toLowerCase();
         if (!((item.nama_lengkap && item.nama_lengkap.toLowerCase().includes(term)) || (item.nik && item.nik.includes(term)) || (item.kabupaten_kota && item.kabupaten_kota.toLowerCase().includes(term)))) return false;
       }
-      if (filterWaktu !== 'Semua') {
-        const itemDate = new Date(item.created_at); const now = new Date();
-        if (filterWaktu === '7 Hari Terakhir') { const past7 = new Date(); past7.setDate(now.getDate() - 7); if (itemDate < past7) return false;
-        } else if (filterWaktu === 'Bulan Ini') { if (itemDate.getMonth() !== now.getMonth() || itemDate.getFullYear() !== now.getFullYear()) return false;
-        } else if (filterWaktu === 'Bulan Lalu') { let lastMonth = now.getMonth() - 1; let year = now.getFullYear(); if (lastMonth < 0) { lastMonth = 11; year -= 1; } if (itemDate.getMonth() !== lastMonth || itemDate.getFullYear() !== year) return false;
-        } else if (filterWaktu === 'Tahun Ini') { if (itemDate.getFullYear() !== now.getFullYear()) return false; }
+      if (filterWaktu) {
+        const itemLocalDate = new Date(item.created_at);
+        const year = itemLocalDate.getFullYear();
+        const month = String(itemLocalDate.getMonth() + 1).padStart(2, '0');
+        const day = String(itemLocalDate.getDate()).padStart(2, '0');
+        const itemDateString = `${year}-${month}-${day}`;
+        if (itemDateString !== filterWaktu) return false;
+      }
+      if (activeTab !== 'Pending') {
+        if (filterKeaktifan !== 'Semua') {
+          const itemActive = item.status_penerima || 'Aktif';
+          if (itemActive !== filterKeaktifan) return false;
+        }
+        if (filterPendapatan !== 'Semua') {
+          if (item.pendapatan !== filterPendapatan) return false;
+        }
       }
       return true;
     });
-  }, [dataBansos, activeTab, searchTerm, filterProgram, filterWaktu]);
+  }, [dataBansos, activeTab, searchTerm, filterProgram, filterWaktu, filterKeaktifan, filterPendapatan]);
 
   const handleExportExcel = useCallback(async () => {
     if (filteredData.length === 0) { toast.error("Tidak ada data untuk diexport dengan filter saat ini!"); return }
@@ -410,16 +435,51 @@ export default function VerificationQueue({
                </select>
             </div>
             <div className="flex items-center gap-2">
-               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Waktu:</span>
-               <select value={filterWaktu} onChange={(e) => setFilterWaktu(e.target.value)} className="bg-white border border-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-900 cursor-pointer">
-                   <option value="Semua">Semua Waktu</option><option value="7 Hari Terakhir">7 Hari Terakhir</option><option value="Bulan Ini">Bulan Ini</option><option value="Bulan Lalu">Bulan Lalu</option><option value="Tahun Ini">Tahun Ini</option>
+               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tanggal:</span>
+               <input 
+                 type="date" 
+                 value={filterWaktu} 
+                 onChange={(e) => setFilterWaktu(e.target.value)} 
+                 className="bg-white border border-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-900 cursor-pointer" 
+               />
+               {filterWaktu && (
+                 <button 
+                   type="button"
+                   onClick={() => setFilterWaktu('')} 
+                   className="text-xs font-bold text-slate-400 hover:text-slate-600 px-1 focus:outline-none"
+                   title="Reset Tanggal"
+                 >
+                   &times;
+                 </button>
+               )}
+            </div>
+            <div className="flex items-center gap-2">
+               <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Wilayah:</span>
+               <select value={filterWilayah} onChange={(e) => setFilterWilayah(e.target.value)} className="bg-white border border-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-900 cursor-pointer">
+                 {uniqueWilayah.map((wil, idx) => <option key={idx} value={wil}>{wil === 'Semua' ? 'Semua Wilayah' : wil}</option>)}
                </select>
             </div>
-            {filterWilayah !== 'Semua' && (
-              <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-700 px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wide animate-fadeIn">
-                <span>Wilayah: {filterWilayah}</span>
-                <button onClick={() => setFilterWilayah('Semua')} className="hover:text-blue-900 font-extrabold ml-1 leading-none text-xs" title="Hapus filter wilayah">&times;</button>
-              </div>
+            {activeTab === 'Riwayat' && (
+              <>
+                <div className="flex items-center gap-2">
+                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Keaktifan:</span>
+                   <select value={filterKeaktifan} onChange={(e) => setFilterKeaktifan(e.target.value)} className="bg-white border border-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-900 cursor-pointer">
+                     <option value="Semua">Semua Keaktifan</option>
+                     <option value="Aktif">Aktif</option>
+                     <option value="Nonaktif">Non-Aktif</option>
+                   </select>
+                </div>
+                <div className="flex items-center gap-2">
+                   <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Pendapatan:</span>
+                   <select value={filterPendapatan} onChange={(e) => setFilterPendapatan(e.target.value)} className="bg-white border border-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-900 cursor-pointer">
+                     <option value="Semua">Semua Pendapatan</option>
+                     <option value="< Rp 500.000">&lt; Rp 500.000</option>
+                     <option value="Rp 500.000 - Rp 1.000.000">Rp 500.000 - Rp 1.000.000</option>
+                     <option value="Rp 1.000.000 - Rp 2.000.000">Rp 1.000.000 - Rp 2.000.000</option>
+                     <option value="> Rp 2.000.000">&gt; Rp 2.000.000</option>
+                   </select>
+                </div>
+              </>
             )}
          </div>
           <div className="relative w-full md:w-56">

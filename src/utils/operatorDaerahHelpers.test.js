@@ -518,6 +518,169 @@ describe('Modul Operator Daerah (User Stories)', () => {
         expect(supabase.from).not.toHaveBeenCalled();
       });
     });
+
+    it('menerima unggahan Excel dengan variasi penulisan kabupaten/kota dan nama kolom', async () => {
+      const { utils } = require('xlsx');
+      utils.sheet_to_json.mockReturnValueOnce([
+        {
+          nik: '3512345678909999',
+          'No. KK': '3512345678908888',
+          nama_lengkap: 'Warga Kediri Toleran',
+          ALAMAT: 'Jl. Toleran No. 1',
+          KEC: 'Kecamatan',
+          'DESA/KEL': 'Desa',
+          Pekerjaan: 'PNS',
+          Pendapatan: 'Rp 3.000.000',
+          Tanggungan: 2,
+          'Nama Kota': 'Kab Kediri' // Variasi kolom & nilai
+        }
+      ]);
+
+      const mockChain = {
+        select: jest.fn().mockReturnThis(),
+        in: jest.fn().mockResolvedValue({ data: [], error: null }),
+        insert: jest.fn().mockResolvedValue({ error: null })
+      };
+      supabase.from.mockReturnValue(mockChain);
+
+      render(<BansosHistory {...defaultProps} />);
+      
+      const fileInput = screen.getByLabelText(/Impor Masal Excel/i);
+      const dummyFile = new File([''], 'test.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+      const mockFileReaderInstance = {
+        readAsArrayBuffer: jest.fn().mockImplementation(function() {
+          if (this.onload) {
+            this.onload({ target: { result: new ArrayBuffer(0) } });
+          }
+        })
+      };
+      jest.spyOn(window, 'FileReader').mockImplementation(() => mockFileReaderInstance);
+
+      fireEvent.change(fileInput, { target: { files: [dummyFile] } });
+
+      await waitFor(() => {
+        expect(supabase.from).toHaveBeenCalledWith('pengajuan_bantuan');
+        expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('1 data berhasil diimpor!'), expect.any(Object));
+        expect(defaultProps.initData).toHaveBeenCalled();
+      });
+    });
+
+    it('menerima unggahan Excel dengan kota Kabupaten Pamekasan dan variasi spasi', async () => {
+      const pamekasanProps = {
+        ...defaultProps,
+        userProfile: { id: 'op-456', kabupaten_kota: 'Kabupaten Pamekasan' }
+      };
+
+      const { utils } = require('xlsx');
+      utils.sheet_to_json.mockReturnValueOnce([
+        {
+          nik: '3528123456789000',
+          'No. KK': '3528123456789001',
+          nama_lengkap: 'Warga Pamekasan',
+          ALAMAT: 'Jl. Pamekasan No. 1',
+          KEC: 'Pamekasan',
+          'DESA/KEL': 'Bugih',
+          Pekerjaan: 'Nelayan',
+          Pendapatan: 'Rp 1.500.000',
+          Tanggungan: 3,
+          'kabupaten_kota': 'kabupaten pamekasan' // Nilai dengan "kabupaten"
+        }
+      ]);
+
+      const mockChain = {
+        select: jest.fn().mockReturnThis(),
+        in: jest.fn().mockResolvedValue({ data: [], error: null }),
+        insert: jest.fn().mockResolvedValue({ error: null })
+      };
+      supabase.from.mockReturnValue(mockChain);
+
+      render(<BansosHistory {...pamekasanProps} />);
+      
+      const fileInput = screen.getByLabelText(/Impor Masal Excel/i);
+      const dummyFile = new File([''], 'test.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+      const mockFileReaderInstance = {
+        readAsArrayBuffer: jest.fn().mockImplementation(function() {
+          if (this.onload) {
+            this.onload({ target: { result: new ArrayBuffer(0) } });
+          }
+        })
+      };
+      jest.spyOn(window, 'FileReader').mockImplementation(() => mockFileReaderInstance);
+
+      fireEvent.change(fileInput, { target: { files: [dummyFile] } });
+
+      await waitFor(() => {
+        expect(supabase.from).toHaveBeenCalledWith('pengajuan_bantuan');
+        expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('1 data berhasil diimpor!'), expect.any(Object));
+      });
+    });
+
+    it('mengimpor data yang sesuai wilayah dan melewatkan data yang tidak sesuai wilayah', async () => {
+      const { utils } = require('xlsx');
+      utils.sheet_to_json.mockReturnValueOnce([
+        {
+          nik: '3512345678909991',
+          nama_lengkap: 'Warga Sesuai 1',
+          'Kabupaten/Kota': 'Kediri'
+        },
+        {
+          nik: '3512345678909992',
+          nama_lengkap: 'Warga Sesuai 2',
+          'Kabupaten/Kota': 'Kab Kediri'
+        },
+        {
+          nik: '3512345678909993',
+          nama_lengkap: 'Warga Mismatch',
+          'Kabupaten/Kota': 'Surabaya' // Mismatch
+        },
+        {
+          nik: '3512345678909994',
+          nama_lengkap: 'Warga Sesuai 3',
+          'Kabupaten/Kota': 'Kediri'
+        }
+      ]);
+
+      const mockChain = {
+        select: jest.fn().mockReturnThis(),
+        in: jest.fn().mockResolvedValue({ data: [], error: null }),
+        insert: jest.fn().mockResolvedValue({ error: null })
+      };
+      supabase.from.mockReturnValue(mockChain);
+
+      render(<BansosHistory {...defaultProps} />);
+      
+      const fileInput = screen.getByLabelText(/Impor Masal Excel/i);
+      const dummyFile = new File([''], 'test.xlsx', { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+
+      const mockFileReaderInstance = {
+        readAsArrayBuffer: jest.fn().mockImplementation(function() {
+          if (this.onload) {
+            this.onload({ target: { result: new ArrayBuffer(0) } });
+          }
+        })
+      };
+      jest.spyOn(window, 'FileReader').mockImplementation(() => mockFileReaderInstance);
+
+      fireEvent.change(fileInput, { target: { files: [dummyFile] } });
+
+      await waitFor(() => {
+        expect(supabase.from).toHaveBeenCalledWith('pengajuan_bantuan');
+        expect(mockChain.insert).toHaveBeenCalledWith(expect.arrayContaining([
+          expect.objectContaining({ nik: '3512345678909991' }),
+          expect.objectContaining({ nik: '3512345678909992' }),
+          expect.objectContaining({ nik: '3512345678909994' })
+        ]));
+        expect(mockChain.insert).not.toHaveBeenCalledWith(expect.arrayContaining([
+          expect.objectContaining({ nik: '3512345678909993' })
+        ]));
+        expect(toast.success).toHaveBeenCalledWith(
+          expect.stringContaining('Impor selesai! 3 data berhasil diimpor! Catatan: 1 data dilewati karena wilayah tidak sesuai.'),
+          expect.any(Object)
+        );
+      });
+    });
   });
 
   describe('KK-03: Statistik Dasbor', () => {

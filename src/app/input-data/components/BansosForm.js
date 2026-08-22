@@ -199,6 +199,9 @@ export default function BansosForm({
   return (
     <div className="p-6 md:p-10 animate-fadeIn">
       <form id="form-input" onSubmit={handleSubmit} className="max-w-4xl mx-auto space-y-8">
+        <div className="text-right text-xs text-slate-500 font-medium">
+          Tanda <span className="text-rose-500 font-bold">*</span> wajib diisi
+        </div>
         {editId && (
           <div className="bg-amber-50 border border-amber-200 p-5 rounded-xl flex items-start gap-4 shadow-sm">
             <div className="p-2 bg-amber-100 rounded-lg text-amber-600">
@@ -221,7 +224,9 @@ export default function BansosForm({
           <div className="md:col-span-2 space-y-5 bg-slate-50 p-6 rounded-xl border border-slate-200">
             <div className="grid grid-cols-2 gap-5">
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">NIK (16 Digit)</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                  NIK (16 Digit) <span className="text-rose-500">*</span>
+                </label>
                 <input required type="text" maxLength="16" className="w-full px-4 py-3 border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-900 text-sm outline-none" value={formData.nik} onChange={e => {
                   const val = e.target.value.replace(/\D/g, '');
                   setFormData({...formData, nik: val});
@@ -231,15 +236,21 @@ export default function BansosForm({
                 {isCheckingNik && <p className="text-blue-900 text-[10px] mt-1.5 animate-pulse">Memeriksa NIK...</p>}
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">No. KK (16 Digit)</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                  No. KK (16 Digit) <span className="text-rose-500">*</span>
+                </label>
                 <input required type="text" maxLength="16" className="w-full px-4 py-3 border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-900 text-sm outline-none" value={formData.no_kk} onChange={e => setFormData({...formData, no_kk: e.target.value.replace(/\D/g, '')})} placeholder="0000..." />
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Nama Lengkap</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                  Nama Lengkap <span className="text-rose-500">*</span>
+                </label>
                 <input required type="text" className="w-full px-4 py-3 border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-900 text-sm outline-none" value={formData.nama} onChange={e => setFormData({...formData, nama: e.target.value})} placeholder="Sesuai KTP" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Agama</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                  Agama <span className="text-rose-500">*</span>
+                </label>
                 <select required className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-900 text-sm bg-white outline-none" value={formData.agama || ''} onChange={e => setFormData({...formData, agama: e.target.value})}>
                   <option value="">Pilih Agama</option>
                   <option value="Islam">Islam</option>
@@ -252,7 +263,9 @@ export default function BansosForm({
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Status Pernikahan</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                  Status Pernikahan <span className="text-rose-500">*</span>
+                </label>
                 <select required className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-900 text-sm bg-white outline-none" value={formData.status_pernikahan || ''} onChange={e => setFormData({...formData, status_pernikahan: e.target.value})}>
                   <option value="">Pilih Status</option>
                   <option value="Belum Kawin">Belum Kawin</option>
@@ -262,7 +275,9 @@ export default function BansosForm({
                 </select>
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Pendidikan Terakhir</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                  Pendidikan Terakhir <span className="text-rose-500">*</span>
+                </label>
                 <select required className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-900 text-sm bg-white outline-none" value={formData.pendidikan_terakhir || ''} onChange={e => setFormData({...formData, pendidikan_terakhir: e.target.value})}>
                   <option value="">Pilih Pendidikan</option>
                   <option value="Tidak Sekolah">Tidak Sekolah</option>
@@ -275,7 +290,9 @@ export default function BansosForm({
               </div>
             </div>
             <div>
-              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Alamat Domisili</label>
+              <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                Alamat Domisili <span className="text-rose-500">*</span>
+              </label>
               <textarea required rows="2" className="w-full px-4 py-3 border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-900 text-sm outline-none" value={formData.alamat} onChange={e => setFormData({...formData, alamat: e.target.value})} placeholder="Jalan, RT/RW, Kelurahan..."></textarea>
             </div>
             <div>
@@ -295,15 +312,21 @@ export default function BansosForm({
           <div className="md:col-span-2 space-y-5 bg-slate-50 p-6 rounded-xl border border-slate-200">
             <div className="grid grid-cols-2 gap-5">
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Pekerjaan Utama</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                  Pekerjaan Utama <span className="text-rose-500">*</span>
+                </label>
                 <input required type="text" className="w-full px-4 py-3 border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-900 text-sm outline-none" value={formData.pekerjaan} onChange={e => setFormData({...formData, pekerjaan: e.target.value})} placeholder="Cth: Buruh Harian" />
               </div>
               <div>
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Jumlah Tanggungan</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                  Jumlah Tanggungan <span className="text-rose-500">*</span>
+                </label>
                 <input required type="number" min="0" className="w-full px-4 py-3 border border-slate-200 bg-white rounded-lg focus:ring-2 focus:ring-blue-900 text-sm outline-none" value={formData.tanggungan} onChange={e => setFormData({...formData, tanggungan: e.target.value})} placeholder="Jumlah anggota keluarga" />
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Pendapatan Rata-Rata / Bulan</label>
+                <label className="block text-xs font-bold text-slate-500 uppercase mb-2">
+                  Pendapatan Rata-Rata / Bulan <span className="text-rose-500">*</span>
+                </label>
                 <select className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-900 text-sm bg-white outline-none" value={formData.pendapatan} onChange={e => setFormData({...formData, pendapatan: e.target.value})}>
                   <option value="< Rp 500.000">&lt; Rp 500.000</option>
                   <option value="Rp 500.000 - Rp 1.000.000">Rp 500.000 - Rp 1.000.000</option>
@@ -328,6 +351,7 @@ export default function BansosForm({
                 <div key={type} className="bg-white p-4 rounded-xl border border-slate-200">
                   <label className="block text-[10px] font-bold text-slate-400 uppercase mb-2">
                     {type === 'ktp' ? 'Foto E-KTP' : type === 'diri' ? 'Foto Diri' : type === 'kerja' ? 'Foto Pekerjaan' : 'Foto Rumah'}
+                    {!editId && <span className="text-rose-500 font-bold ml-1">*</span>}
                   </label>
                   <input required={!editId} type="file" accept="image/png, image/jpeg, image/jpg" onChange={(e) => handleFileChange(e, type)} className="block w-full text-xs text-slate-500 file:mr-3 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-xs file:font-bold file:bg-blue-50 file:text-blue-900 hover:file:bg-blue-100 transition cursor-pointer"/>
                 </div>

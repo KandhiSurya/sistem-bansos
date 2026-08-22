@@ -2,8 +2,6 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import toast from 'react-hot-toast'
 import { read, utils } from 'xlsx'
-import ExcelJS from 'exceljs'
-import { saveAs } from 'file-saver'
 import { supabase } from '@/lib/supabaseClient'
 import { getDirectImageUrl } from '@/utils/imageHelpers'
 
@@ -20,14 +18,12 @@ export default function BansosHistory({
   catatLog,
   handleEdit,
   importExcelTrigger,
-  setImportExcelTrigger,
-  exportExcelTrigger,
-  setExportExcelTrigger
+  setImportExcelTrigger
 }) {
   const [searchTerm, setSearchTerm] = useState('')
   const [filterProgram, setFilterProgram] = useState('Semua')
   const [filterStatus, setFilterStatus] = useState('Semua')
-  const [filterWaktu, setFilterWaktu] = useState('Semua')
+  const [filterWaktu, setFilterWaktu] = useState('')
   const [filteredData, setFilteredData] = useState([])
   const [selectedItem, setSelectedItem] = useState(null)
   const [isImporting, setIsImporting] = useState(false)
@@ -42,77 +38,7 @@ export default function BansosHistory({
     }
   }, [importExcelTrigger, setImportExcelTrigger])
 
-  // Logika Ekspor Excel
-  const handleExportExcel = useCallback(async () => {
-    if (filteredData.length === 0) { 
-      toast.error("Tidak ada data untuk diexport dengan filter saat ini!")
-      return 
-    }
-    toast.success("Mempersiapkan Laporan Excel...")
-    const workbook = new ExcelJS.Workbook()
-    const worksheet = workbook.addWorksheet('Laporan Pengajuan')
-    worksheet.columns = [
-      { header: 'No', key: 'no', width: 5 }, 
-      { header: 'Tanggal Input', key: 'tanggal', width: 15 }, 
-      { header: 'NIK', key: 'nik', width: 20 }, 
-      { header: 'Nama Lengkap', key: 'nama', width: 25 }, 
-      { header: 'Agama', key: 'agama', width: 15 }, 
-      { header: 'Status Pernikahan', key: 'status_pernikahan', width: 20 },
-      { header: 'Pendidikan Terakhir', key: 'pendidikan_terakhir', width: 20 }, 
-      { header: 'Program', key: 'bantuan', width: 18 }, 
-      { header: 'Kabupaten/Kota', key: 'kota', width: 20 },
-      { header: 'Alamat', key: 'alamat', width: 40 }, 
-      { header: 'Status Validasi', key: 'status', width: 18 }, 
-      { header: 'Keaktifan', key: 'aktif', width: 15 }, 
-      { header: 'Catatan Tambahan', key: 'catatan_tambahan', width: 30 }, 
-      { header: 'Catatan Penolakan', key: 'catatan', width: 30 }, 
-      { header: 'Link Foto KTP', key: 'ktp', width: 25 }, 
-      { header: 'Link Foto Diri', key: 'diri', width: 25 }, 
-      { header: 'Link Foto Rumah', key: 'rumah', width: 25 }, 
-      { header: 'Link Foto Pekerjaan', key: 'pekerjaan', width: 25 }
-    ]
-    worksheet.getRow(1).font = { bold: true }; worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' }
 
-    filteredData.forEach((item, index) => {
-      worksheet.addRow({
-        no: index + 1, 
-        tanggal: new Date(item.created_at).toLocaleDateString('id-ID'), 
-        nik: item.nik, 
-        nama: item.nama_lengkap, 
-        agama: item.agama || '-', 
-        status_pernikahan: item.status_pernikahan || '-', 
-        pendidikan_terakhir: item.pendidikan_terakhir || '-',
-        bantuan: item.jenis_bantuan, 
-        kota: item.kabupaten_kota || '-', 
-        alamat: item.alamat, 
-        status: item.status, 
-        aktif: item.status_penerima || 'Aktif', 
-        catatan_tambahan: item.catatan_tambahan || '-', 
-        catatan: item.alasan_penolakan || '-',
-        ktp: item.foto_ktp ? { text: 'Buka Foto KTP', hyperlink: item.foto_ktp } : 'Tidak Ada', 
-        diri: item.foto_diri ? { text: 'Buka Foto Diri', hyperlink: item.foto_diri } : 'Tidak Ada',
-        rumah: item.foto_rumah ? { text: 'Buka Foto Rumah', hyperlink: item.foto_rumah } : 'Tidak Ada', 
-        pekerjaan: item.foto_pekerjaan ? { text: 'Buka Foto Pekerjaan', hyperlink: item.foto_pekerjaan } : 'Tidak Ada'
-      })
-    })
-
-    worksheet.eachRow((row, rowNumber) => {
-        if (rowNumber > 1) {
-            ['ktp','diri','rumah','pekerjaan'].forEach(k => { row.getCell(k).font = row.getCell(k).value?.hyperlink ? { color: { argb: 'FF0563C1' }, underline: true } : {} })
-        }
-    });
-    const buffer = await workbook.xlsx.writeBuffer()
-    const kabupatenKota = userProfile?.kabupaten_kota || 'Daerah'
-    saveAs(new Blob([buffer]), `Laporan_Operator_${kabupatenKota.replace(/\s+/g, '_')}_${new Date().toLocaleDateString('id-ID').replace(/\//g, '-')}.xlsx`)
-  }, [filteredData, userProfile])
-
-  // Efek Pemicu Ekspor Excel
-  useEffect(() => {
-    if (exportExcelTrigger) {
-      handleExportExcel()
-      setExportExcelTrigger(false)
-    }
-  }, [exportExcelTrigger, setExportExcelTrigger, handleExportExcel])
 
   useEffect(() => {
     let data = historyData;
@@ -122,23 +48,14 @@ export default function BansosHistory({
     if (filterStatus !== 'Semua') {
       data = data.filter(d => d.status === filterStatus);
     }
-    if (filterWaktu !== 'Semua') {
-      const now = new Date();
+    if (filterWaktu) {
       data = data.filter(d => {
-        const itemDate = new Date(d.created_at);
-        if (filterWaktu === '7 Hari Terakhir') {
-          const past7 = new Date(); past7.setDate(now.getDate() - 7);
-          return itemDate >= past7;
-        } else if (filterWaktu === 'Bulan Ini') {
-          return itemDate.getMonth() === now.getMonth() && itemDate.getFullYear() === now.getFullYear();
-        } else if (filterWaktu === 'Bulan Lalu') {
-          let lastMonth = now.getMonth() - 1; let year = now.getFullYear();
-          if (lastMonth < 0) { lastMonth = 11; year -= 1; }
-          return itemDate.getMonth() === lastMonth && itemDate.getFullYear() === year;
-        } else if (filterWaktu === 'Tahun Ini') {
-          return itemDate.getFullYear() === now.getFullYear();
-        }
-        return true;
+        const itemLocalDate = new Date(d.created_at);
+        const year = itemLocalDate.getFullYear();
+        const month = String(itemLocalDate.getMonth() + 1).padStart(2, '0');
+        const day = String(itemLocalDate.getDate()).padStart(2, '0');
+        const itemDateString = `${year}-${month}-${day}`;
+        return itemDateString === filterWaktu;
       });
     }
     if (searchTerm) {
@@ -208,18 +125,37 @@ export default function BansosHistory({
               }
             }
 
+            const getRowValue = (row, possibleKeys) => {
+              if (!row) return null;
+              const rowKeys = Object.keys(row);
+              const matchedKey = rowKeys.find(key => {
+                const normKey = key.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+                return possibleKeys.some(k => k.toLowerCase().replace(/[^a-z0-9]/g, '') === normKey);
+              });
+              return matchedKey ? row[matchedKey] : null;
+            };
+
             // Filter baris kosong atau baris yang tidak memiliki NIK dan Nama Lengkap
             validRows = rowsData.filter(row => {
-              const hasName = row['NAMA'] || row['nama_lengkap'] || row['Nama Lengkap']
-              const hasNik = row['NIK'] || row['nik']
+              const hasName = getRowValue(row, ['NAMA', 'nama_lengkap', 'Nama Lengkap'])
+              const hasNik = getRowValue(row, ['NIK', 'nik'])
               return hasName && hasNik
             })
           } else {
             // Fallback ke utils.sheet_to_json untuk data mock testing
             const jsonData = utils.sheet_to_json(worksheet || {})
+            const getRowValue = (row, possibleKeys) => {
+              if (!row) return null;
+              const rowKeys = Object.keys(row);
+              const matchedKey = rowKeys.find(key => {
+                const normKey = key.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+                return possibleKeys.some(k => k.toLowerCase().replace(/[^a-z0-9]/g, '') === normKey);
+              });
+              return matchedKey ? row[matchedKey] : null;
+            };
             validRows = jsonData.filter(row => {
-              const hasName = row['NAMA'] || row.nama_lengkap || row['Nama Lengkap']
-              const hasNik = row['NIK'] || row.nik
+              const hasName = getRowValue(row, ['NAMA', 'nama_lengkap', 'Nama Lengkap'])
+              const hasNik = getRowValue(row, ['NIK', 'nik'])
               return hasName && hasNik
             })
           }
@@ -241,29 +177,121 @@ export default function BansosHistory({
             return null
           }
 
+          const parseStructuredNotes = (notesStr, existingRow) => {
+            if (!notesStr || !notesStr.includes('No. KK:')) {
+              return { ...existingRow, catatan_tambahan: notesStr };
+            }
+
+            const result = { ...existingRow };
+            const pairs = notesStr.split(';').map(p => p.trim());
+            const parsedData = {};
+
+            pairs.forEach(pair => {
+              const parts = pair.split(':');
+              if (parts.length >= 2) {
+                const key = parts[0].trim().toLowerCase();
+                const val = parts.slice(1).join(':').trim();
+                parsedData[key] = val;
+              }
+            });
+
+            // 1. No. KK
+            if (parsedData['no. kk'] && (!result.no_kk || result.no_kk === '-')) {
+              result.no_kk = parsedData['no. kk'].replace(/\D/g, '').substring(0, 16);
+            }
+
+            // 2. Pekerjaan
+            if (!result.pekerjaan || result.pekerjaan === '-' || result.pekerjaan === '') {
+              const pekSuami = parsedData['pekerjaan suami'];
+              const pekIstri = parsedData['pekerjaan istri'];
+              const pekerjaan = parsedData['pekerjaan'];
+              if (pekerjaan && pekerjaan !== '-') {
+                result.pekerjaan = pekerjaan;
+              } else if (pekSuami && pekSuami !== '-') {
+                result.pekerjaan = pekSuami;
+              } else if (pekIstri && pekIstri !== '-') {
+                result.pekerjaan = pekIstri;
+              }
+            }
+
+            // 3. Tanggungan
+            if (!result.tanggungan || result.tanggungan === 0) {
+              const tanggunganStr = parsedData['jumlah tanggungan'] || parsedData['tanggungan'];
+              if (tanggunganStr) {
+                const num = parseInt(tanggunganStr.replace(/\D/g, ''));
+                if (!isNaN(num)) {
+                  result.tanggungan = num;
+                }
+              }
+            }
+
+            // 4. Pendapatan
+            if (!result.pendapatan || result.pendapatan === '< Rp 500.000' || result.pendapatan === '') {
+              const penStr = parsedData['penghasilan suami/istri per bulan'] || parsedData['penghasilan'] || parsedData['pendapatan'];
+              if (penStr) {
+                const num = parseInt(penStr.replace(/\D/g, ''));
+                if (!isNaN(num)) {
+                  if (num < 500000) {
+                    result.pendapatan = '< Rp 500.000';
+                  } else if (num >= 500000 && num <= 1000000) {
+                    result.pendapatan = 'Rp 500.000 - Rp 1.000.000';
+                  } else if (num > 1000000 && num <= 2000000) {
+                    result.pendapatan = 'Rp 1.000.000 - Rp 2.000.000';
+                  } else {
+                    result.pendapatan = '> Rp 2.000.000';
+                  }
+                }
+              }
+            }
+
+            // Set catatan_tambahan to the actual human notes if present in the parsed keys
+            const humanNotes = parsedData['catatan tambahan'] || parsedData['catatan'] || parsedData['catatan_tambahan'];
+            if (humanNotes && !humanNotes.includes('No. KK:') && !humanNotes.includes('TTL:')) {
+              result.catatan_tambahan = humanNotes;
+            } else {
+              result.catatan_tambahan = null;
+            }
+
+            return result;
+          }
+
           const invalidRows = []
           const normalizeKabKota = (str) => {
             if (!str) return ''
             return String(str)
-              .replace(/^(kota|kabupaten|kab\.)\s+/i, '')
-              .replace(/\s+/g, '')
               .toLowerCase()
+              .replace(/[^a-z0-9]/g, '')
+              .replace(/^(kabupaten|kota|kabkota|kab|kot)/, '')
+              .replace(/(kabupaten|kota|kabkota|kab|kot)$/, '')
           }
 
-          const formattedData = validRows.map((row, index) => {
-            const nikVal = row['NIK'] || row['nik'] || '';
-            let namaVal = row['NAMA'] || row['nama_lengkap'] || row['Nama Lengkap'] || '';
+          const formattedData = []
+          validRows.forEach((row, index) => {
+            const getRowValue = (row, possibleKeys) => {
+              if (!row) return null;
+              const rowKeys = Object.keys(row);
+              const matchedKey = rowKeys.find(key => {
+                const normKey = key.trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+                return possibleKeys.some(k => k.toLowerCase().replace(/[^a-z0-9]/g, '') === normKey);
+              });
+              return matchedKey ? row[matchedKey] : null;
+            };
+
+            const nikVal = getRowValue(row, ['NIK', 'nik']) || '';
+            let namaVal = getRowValue(row, ['NAMA', 'nama_lengkap', 'Nama Lengkap']) || '';
             
             // Pisahkan NIK dari Nama jika tergabung dengan koma (contoh: "ABD DJALAL, 3507...")
             if (typeof namaVal === 'string' && namaVal.includes(',')) {
               namaVal = namaVal.split(',')[0].trim();
             }
 
-            const kabKotaRowVal = row['kabupaten_kota'] || row['Kabupaten/Kota'] || row['Kabupaten'] || row['Kota'] || row['Wilayah'] || row['kabupaten'] || row['kota'] || row['wilayah'] || null;
+            const kabKotaRowVal = getRowValue(row, ['kabupaten_kota', 'Kabupaten/Kota', 'Kabupaten', 'Kota', 'Wilayah', 'kabupaten', 'kota', 'wilayah', 'Nama Kota', 'Nama Kabupaten']);
+            let isRowValid = true;
             if (kabKotaRowVal) {
               const rowNorm = normalizeKabKota(kabKotaRowVal)
               const profileNorm = normalizeKabKota(userProfile.kabupaten_kota)
               if (rowNorm !== profileNorm) {
+                isRowValid = false;
                 invalidRows.push({
                   index: index + 2, // Baris ke-2 dst. karena header baris ke-1
                   nik: String(nikVal).trim(),
@@ -273,70 +301,65 @@ export default function BansosHistory({
               }
             }
 
-            const noKkVal = row['no_kk'] || row['No. KK'] || row['No KK'] || null;
-            
-            let alamatVal = row['ALAMAT'] || row['alamat'] || row['Alamat'] || '-';
-            const desaVal = row['DESA/KEL'] || '';
-            const kecVal = row['KEC'] || '';
-            if (desaVal || kecVal) {
-              const parts = [alamatVal];
-              if (desaVal) parts.push(`Kel/Desa. ${desaVal}`);
-              if (kecVal) parts.push(`Kec. ${kecVal}`);
-              alamatVal = parts.join(', ');
-            }
-            
-            const pekerjaanVal = row['pekerjaan'] || row['Pekerjaan'] || '-';
-            const pendapatanVal = row['pendapatan'] || row['Pendapatan'] || '< Rp 500.000';
-            const tanggunganVal = row['tanggungan'] || row['Tanggungan'] || 0;
-            const agamaVal = row['agama'] || row['Agama'] || null;
-            const statusPernikahanVal = row['status_pernikahan'] || row['Status Pernikahan'] || null;
-            const pendidikanTerakhirVal = row['pendidikan_terakhir'] || row['Pendidikan Terakhir'] || null;
-            const catatanTambahanVal = row['catatan_tambahan'] || row['Catatan Tambahan'] || null;
-            
-            const jenisBantuanVal = row['jenis_bantuan'] || row['Program'] || 'Belum Ditentukan';
-            const statusVal = row['status'] || row['Status Validasi'] || 'Menunggu Validasi';
-            const alasanPenolakanVal = row['alasan_penolakan'] || row['Catatan Penolakan'] || row['Catatan'] || null;
-            const statusPenerimaVal = row['status_penerima'] || row['Keaktifan'] || 'Aktif';
-            
-            const fotoKtpVal = row['foto_ktp'] || row['Link Foto KTP'] || null;
-            const fotoDiriVal = row['foto_diri'] || row['Link Foto Diri'] || null;
-            const fotoRumahVal = row['foto_rumah'] || row['Link Foto Rumah'] || null;
-            const fotoPekerjaanVal = row['foto_pekerjaan'] || row['Link Foto Pekerjaan'] || null;
+            if (isRowValid) {
+              const noKkVal = getRowValue(row, ['no_kk', 'No. KK', 'No KK', 'KK', 'Nomor KK', 'Nomor Kartu Keluarga']);
+              
+              let alamatVal = getRowValue(row, ['ALAMAT', 'alamat', 'Alamat', 'Alamat Domisili']) || '-';
+              const desaVal = getRowValue(row, ['DESA/KEL', 'Desa/Kel', 'Desa', 'Kelurahan']) || '';
+              const kecVal = getRowValue(row, ['KEC', 'Kec', 'Kecamatan']) || '';
+              if (desaVal || kecVal) {
+                const parts = [alamatVal];
+                if (desaVal) parts.push(`Kel/Desa. ${desaVal}`);
+                if (kecVal) parts.push(`Kec. ${kecVal}`);
+                alamatVal = parts.join(', ');
+              }
+              
+              const pekerjaanVal = getRowValue(row, ['pekerjaan', 'Pekerjaan']) || '-';
+              const pendapatanVal = getRowValue(row, ['pendapatan', 'Pendapatan']) || '< Rp 500.000';
+              const tanggunganVal = getRowValue(row, ['tanggungan', 'Tanggungan']) || 0;
+              const agamaVal = getRowValue(row, ['agama', 'Agama']);
+              const statusPernikahanVal = getRowValue(row, ['status_pernikahan', 'Status Pernikahan']);
+              const pendidikanTerakhirVal = getRowValue(row, ['pendidikan_terakhir', 'Pendidikan Terakhir', 'Pendidikan']);
+              const catatanTambahanVal = getRowValue(row, ['catatan_tambahan', 'Catatan Tambahan', 'Catatan']);
+              
+              const jenisBantuanVal = getRowValue(row, ['jenis_bantuan', 'Program', 'Jenis Bantuan']) || 'Belum Ditentukan';
+              const statusVal = getRowValue(row, ['status', 'Status Validasi', 'Status']) || 'Menunggu Validasi';
+              const alasanPenolakanVal = getRowValue(row, ['alasan_penolakan', 'Catatan Penolakan', 'Catatan', 'Alasan Penolakan']) || null;
+              const statusPenerimaVal = getRowValue(row, ['status_penerima', 'Keaktifan', 'Status Penerima']) || 'Aktif';
+              
+              const fotoKtpVal = getRowValue(row, ['foto_ktp', 'Link Foto KTP', 'Foto KTP', 'KTP']) || null;
+              const fotoDiriVal = getRowValue(row, ['foto_diri', 'Link Foto Diri', 'Foto Diri', 'Diri']) || null;
+              const fotoRumahVal = getRowValue(row, ['foto_rumah', 'Link Foto Rumah', 'Foto Rumah', 'Rumah']) || null;
+              const fotoPekerjaanVal = getRowValue(row, ['foto_pekerjaan', 'Link Foto Pekerjaan', 'Foto Pekerjaan', 'Pekerjaan']) || null;
 
-            return {
-              nik: String(nikVal).replace(/['"]/g, '').trim().substring(0, 16), 
-              no_kk: noKkVal ? String(noKkVal).replace(/['"]/g, '').trim().substring(0, 16) : null, 
-              nama_lengkap: String(namaVal).trim(), 
-              alamat: String(alamatVal).trim(), 
-              pekerjaan: String(pekerjaanVal).trim(), 
-              pendapatan: String(pendapatanVal).trim(), 
-              tanggungan: parseInt(tanggunganVal) || 0,
-              agama: agamaVal ? String(agamaVal).trim() : null,
-              status_pernikahan: statusPernikahanVal ? String(statusPernikahanVal).trim() : null,
-              pendidikan_terakhir: pendidikanTerakhirVal ? String(pendidikanTerakhirVal).trim() : null,
-              catatan_tambahan: catatanTambahanVal ? String(catatanTambahanVal).trim() : null,
-              jenis_bantuan: jenisBantuanVal, 
-              status: statusVal, 
-              alasan_penolakan: alasanPenolakanVal ? String(alasanPenolakanVal).trim() : null,
-              status_penerima: statusPenerimaVal,
-              foto_ktp: cleanUrl(fotoKtpVal),
-              foto_diri: cleanUrl(fotoDiriVal),
-              foto_rumah: cleanUrl(fotoRumahVal),
-              foto_pekerjaan: cleanUrl(fotoPekerjaanVal),
-              user_id: userProfile.id, 
-              kabupaten_kota: userProfile.kabupaten_kota
+              const rawRowObj = {
+                nik: String(nikVal).replace(/['"]/g, '').trim().substring(0, 16), 
+                no_kk: noKkVal ? String(noKkVal).replace(/['"]/g, '').trim().substring(0, 16) : null, 
+                nama_lengkap: String(namaVal).trim(), 
+                alamat: String(alamatVal).trim(), 
+                pekerjaan: String(pekerjaanVal).trim(), 
+                pendapatan: String(pendapatanVal).trim(), 
+                tanggungan: parseInt(tanggunganVal) || 0,
+                agama: agamaVal ? String(agamaVal).trim() : null,
+                status_pernikahan: statusPernikahanVal ? String(statusPernikahanVal).trim() : null,
+                pendidikan_terakhir: pendidikanTerakhirVal ? String(pendidikanTerakhirVal).trim() : null,
+                catatan_tambahan: catatanTambahanVal ? String(catatanTambahanVal).trim() : null,
+                jenis_bantuan: jenisBantuanVal, 
+                status: statusVal, 
+                alasan_penolakan: alasanPenolakanVal ? String(alasanPenolakanVal).trim() : null,
+                status_penerima: statusPenerimaVal,
+                foto_ktp: cleanUrl(fotoKtpVal),
+                foto_diri: cleanUrl(fotoDiriVal),
+                foto_rumah: cleanUrl(fotoRumahVal),
+                foto_pekerjaan: cleanUrl(fotoPekerjaanVal),
+                user_id: userProfile.id, 
+                kabupaten_kota: userProfile.kabupaten_kota
+              };
+
+              const parsedRowObj = parseStructuredNotes(rawRowObj.catatan_tambahan, rawRowObj);
+              formattedData.push(parsedRowObj);
             }
           })
-
-          if (invalidRows.length > 0) {
-            const firstInvalid = invalidRows[0]
-            toast.error(
-              `Gagal impor: Terdapat ${invalidRows.length} data dengan kabupaten/kota yang tidak sesuai dengan wilayah Anda (${userProfile.kabupaten_kota}). Baris ${firstInvalid.index} (Nama: ${firstInvalid.nama}) terdeteksi wilayah "${firstInvalid.wilayah}".`,
-              { id: loadingToast, duration: 8000 }
-            )
-            setIsImporting(false)
-            return
-          }
 
           // 1. Hilangkan baris yang NIK-nya kembar di dalam file Excel itu sendiri (Deduplikasi Internal)
           const seenNiks = new Set()
@@ -380,21 +403,28 @@ export default function BansosHistory({
             if (error) throw error
 
             // 5. Tampilkan notifikasi ringkas ke pengguna
-            toast.success(
-              `Impor selesai! ${finalDataToInsert.length} data berhasil diimpor!${
-                totalSkipped > 0 ? ` ${totalSkipped} data dilewati karena NIK terdaftar/duplikat.` : ''
-              }`,
-              { id: loadingToast, duration: 6000 }
-            )
+            let message = `Impor selesai! ${finalDataToInsert.length} data berhasil diimpor!`
+            if (invalidRows.length > 0 || totalSkipped > 0) {
+              message += ` Catatan:`
+              if (invalidRows.length > 0) {
+                message += ` ${invalidRows.length} data dilewati karena wilayah tidak sesuai.`
+              }
+              if (totalSkipped > 0) {
+                message += ` ${totalSkipped} data dilewati karena NIK duplikat/sudah terdaftar.`
+              }
+            }
+
+            toast.success(message, { id: loadingToast, duration: 8000 })
             await catatLog(
               "Import Excel", 
-              `Mengimpor data bansos warga secara massal sebanyak ${finalDataToInsert.length} data (dilewati ${totalSkipped} duplikat).`
+              `Mengimpor data bansos warga secara massal sebanyak ${finalDataToInsert.length} data (${invalidRows.length} dilewati salah wilayah, ${totalSkipped} dilewati duplikat).`
             )
           } else {
-            toast.error(
-              `Gagal impor: Semua data (${totalSkipped} data) dilewati karena NIK sudah terdaftar atau duplikat.`,
-              { id: loadingToast, duration: 6000 }
-            )
+            let errorMsg = `Gagal impor: Terdapat ${invalidRows.length} data dengan kabupaten/kota yang tidak sesuai dengan wilayah Anda (${userProfile.kabupaten_kota}).`
+            if (totalSkipped > 0) {
+              errorMsg += ` Sisa data dilewati karena duplikat/sudah terdaftar.`
+            }
+            toast.error(errorMsg, { id: loadingToast, duration: 8000 })
           }
 
           await initData() 
@@ -413,61 +443,7 @@ export default function BansosHistory({
     }
   }
 
-  const handlePrint = (item) => {
-    const printWindow = window.open('', '_blank', 'width=900,height=700')
-    printWindow.document.write(`
-    <html>
-    <head>
-      <title>Bukti Pengajuan - ${item.nama_lengkap}</title>
-      <style>
-        @media print { 
-          @page { size: A4; margin: 15mm; } 
-          body { -webkit-print-color-adjust: exact; color-adjust: exact; } 
-          .avoid-break { page-break-inside: avoid; break-inside: avoid; }
-        } 
-        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: auto; color: #111; } 
-        h1 { font-size: 20px; margin-bottom: 5px; text-transform: uppercase; color: #000; border-bottom: 2px solid #000; padding-bottom: 10px; } 
-        .meta { font-size: 11px; color: #555; margin-bottom: 20px; font-family: monospace; } 
-        .info-table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-        .info-table td { padding: 10px 10px 10px 0; vertical-align: top; border-bottom: 1px dashed #e2e8f0; width: 50%; }
-        .label { font-size: 10px; font-weight: bold; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 4px; }
-        .value { font-size: 14px; font-weight: bold; color: #0f172a; }
-        .status-box { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; background: ${item.status === 'Disetujui' ? '#dcfce7' : item.status === 'Perlu Revisi' ? '#fee2e2' : '#fef3c7'}; color: ${item.status === 'Disetujui' ? '#166534' : item.status === 'Perlu Revisi' ? '#991b1b' : '#92400e'}; border: 1px solid ${item.status === 'Disetujui' ? '#166534' : item.status === 'Perlu Revisi' ? '#991b1b' : '#92400e'}; } 
-        .active-badge { font-size: 10px; font-weight: bold; padding: 3px 6px; border-radius: 3px; margin-left: 5px; background: ${item.status_penerima === 'Nonaktif' ? '#f1f5f9' : '#e0e7ff'}; color: ${item.status_penerima === 'Nonaktif' ? '#64748b' : '#4338ca'}; text-transform: uppercase; } 
-        .images-section { margin-top: 25px; }
-        .images-section h3 { font-size: 13px; background: #f8fafc; padding: 8px 12px; border-left: 4px solid #1e3a8a; margin-bottom: 15px; color: #0f172a;} 
-        .images-flex { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 15px; } 
-        .img-card { width: calc(50% - 10px); border: 1px solid #cbd5e1; padding: 6px; background: #fff; box-sizing: border-box; } 
-        .img-card p { font-size: 10px; text-align: center; margin: 0 0 6px 0; font-weight: bold; background: #f1f5f9; padding: 5px; text-transform: uppercase; color: #334155;} 
-        img { width: 100%; height: 180px; object-fit: cover; display: block; border-radius: 4px; }
-      </style>
-    </head>
-    <body>
-      <h1>Detail Verifikasi Bantuan Sosial</h1>
-      <p class="meta">ID DATA: ${item.id} | DICETAK: ${new Date().toLocaleDateString('id-ID')}</p>
-      <table class="info-table">
-        <tr><td><span class="label">Nama Lengkap</span><span class="value">${item.nama_lengkap}</span></td><td><span class="label">Jenis Bantuan</span><span class="value" style="color: #1e3a8a;">${item.jenis_bantuan}</span></td></tr>
-        <tr><td><span class="label">NIK / KK</span><span class="value">${item.nik} / ${item.no_kk || '-'}</span></td><td><span class="label">Kota/Kabupaten</span><span class="value">${item.kabupaten_kota || '-'}</span></td></tr>
-        <tr><td><span class="label">Pekerjaan & Pendapatan</span><span class="value">${item.pekerjaan || '-'} (${item.pendapatan || '-'})</span></td><td><span class="label">Status Validasi</span><span class="value" style="border:none; padding:0;"><span class="status-box">${item.status}</span><span class="active-badge">${item.status_penerima || 'Aktif'}</span></span></td></tr>
-        <tr><td><span class="label">Agama / Status Pernikahan</span><span class="value">${item.agama || '-'} / ${item.status_pernikahan || '-'}</span></td><td><span class="label">Pendidikan Terakhir</span><span class="value">${item.pendidikan_terakhir || '-'}</span></td></tr>
-        <tr><td><span class="label">Jumlah Tanggungan</span><span class="value">${item.tanggungan !== null ? item.tanggungan + ' Orang' : '-'}</span></td><td><span class="label">Alamat Domisili</span><span class="value" style="font-weight: 500;">${item.alamat}</span></td></tr>
-        <tr><td colspan="2"><span class="label">Catatan Tambahan</span><span class="value" style="font-weight: 500;">${item.catatan_tambahan || '-'}</span></td></tr>
-      </table>
-      <div class="images-section avoid-break">
-        <h3>LAMPIRAN DOKUMEN FOTO</h3>
-        <div class="images-flex">
-          <div class="img-card avoid-break"><p>FOTO KTP</p><img src="${getDirectImageUrl(item.foto_ktp) || ''}" onerror="this.style.display='none'" /></div>
-          <div class="img-card avoid-break"><p>FOTO DIRI</p><img src="${getDirectImageUrl(item.foto_diri) || ''}" onerror="this.style.display='none'" /></div>
-          <div class="img-card avoid-break"><p>FOTO RUMAH</p><img src="${getDirectImageUrl(item.foto_rumah) || ''}" onerror="this.style.display='none'" /></div>
-          <div class="img-card avoid-break"><p>FOTO PEKERJAAN</p><img src="${getDirectImageUrl(item.foto_pekerjaan) || ''}" onerror="this.style.display='none'" /></div>
-        </div>
-      </div>
-      <script>window.onload = function() { setTimeout(function() { window.print(); }, 1500); }</script>
-    </body>
-    </html>
-    `)
-    printWindow.document.close()
-  }
+
 
   return (
     <div className="animate-fadeIn">
@@ -493,14 +469,23 @@ export default function BansosHistory({
             </select>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Waktu:</span>
-            <select value={filterWaktu} onChange={(e) => setFilterWaktu(e.target.value)} className="bg-white border border-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-900 cursor-pointer">
-              <option value="Semua">Semua Waktu</option>
-              <option value="7 Hari Terakhir">7 Hari Terakhir</option>
-              <option value="Bulan Ini">Bulan Ini</option>
-              <option value="Bulan Lalu">Bulan Lalu</option>
-              <option value="Tahun Ini">Tahun Ini</option>
-            </select>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tanggal:</span>
+            <input 
+              type="date" 
+              value={filterWaktu} 
+              onChange={(e) => setFilterWaktu(e.target.value)} 
+              className="bg-white border border-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-900 cursor-pointer" 
+            />
+            {filterWaktu && (
+              <button 
+                type="button"
+                onClick={() => setFilterWaktu('')} 
+                className="text-xs font-bold text-slate-400 hover:text-slate-600 px-1 focus:outline-none"
+                title="Reset Tanggal"
+              >
+                &times;
+              </button>
+            )}
           </div>
           <div className="relative w-40 sm:w-48 md:w-56">
             <input type="text" placeholder="Cari NIK / Nama..." className="pl-3 pr-4 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium focus:border-blue-900 outline-none w-full transition-all" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
@@ -558,7 +543,7 @@ export default function BansosHistory({
            <div className="bg-white rounded-xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl">
               <div className="px-6 py-4 flex justify-between items-center border-b border-slate-100 shrink-0">
                  <div><h3 className="text-lg font-extrabold text-slate-800">Detail Pengajuan Saya</h3><p className="text-xs text-slate-500 font-mono mt-1">ID: {selectedItem.id}</p></div>
-                 <div className="flex items-center gap-2"><button onClick={() => handlePrint(selectedItem)} className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md text-xs font-bold transition">🖨️ Cetak Bukti</button><button onClick={() => setSelectedItem(null)} className="w-8 h-8 bg-slate-50 text-slate-400 rounded-full flex items-center justify-center hover:bg-slate-100 hover:text-slate-800 transition">&times;</button></div>
+                 <div className="flex items-center gap-2"><button onClick={() => setSelectedItem(null)} className="w-8 h-8 bg-slate-50 text-slate-400 rounded-full flex items-center justify-center hover:bg-slate-100 hover:text-slate-800 transition">&times;</button></div>
               </div>
               <div className="p-6 overflow-y-auto flex-1">
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">

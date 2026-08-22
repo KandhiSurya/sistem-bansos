@@ -36,7 +36,7 @@ export default function BansosMonitoring({
 }) {
   // States Filter Monitoring Data
   const [filterProgram, setFilterProgram] = useState('Semua')
-  const [filterWaktu, setFilterWaktu] = useState('Semua')
+  const [filterWaktu, setFilterWaktu] = useState('')
   const [filterWilayah, setFilterWilayah] = useState('Semua')
   const [searchTerm, setSearchTerm] = useState('')
 
@@ -63,12 +63,13 @@ export default function BansosMonitoring({
       const matchWilayah = filterWilayah === 'Semua' || item.kabupaten_kota === filterWilayah;
       
       let matchWaktu = true;
-      if (filterWaktu !== 'Semua') {
-        const itemDate = new Date(item.created_at); const now = new Date();
-        if (filterWaktu === '7 Hari Terakhir') { const past7 = new Date(); past7.setDate(now.getDate() - 7); matchWaktu = itemDate >= past7;
-        } else if (filterWaktu === 'Bulan Ini') { matchWaktu = itemDate.getMonth() === now.getMonth() && itemDate.getFullYear() === now.getFullYear();
-        } else if (filterWaktu === 'Bulan Lalu') { let lastMonth = now.getMonth() - 1; let year = now.getFullYear(); if (lastMonth < 0) { lastMonth = 11; year -= 1; } matchWaktu = itemDate.getMonth() === lastMonth && itemDate.getFullYear() === year;
-        } else if (filterWaktu === 'Tahun Ini') { matchWaktu = itemDate.getFullYear() === now.getFullYear(); }
+      if (filterWaktu) {
+        const itemLocalDate = new Date(item.created_at);
+        const year = itemLocalDate.getFullYear();
+        const month = String(itemLocalDate.getMonth() + 1).padStart(2, '0');
+        const day = String(itemLocalDate.getDate()).padStart(2, '0');
+        const itemDateString = `${year}-${month}-${day}`;
+        matchWaktu = itemDateString === filterWaktu;
       }
 
       let matchSearch = true;
@@ -89,12 +90,13 @@ export default function BansosMonitoring({
       const matchProgram = filterProgram === 'Semua' || item.jenis_bantuan === filterProgram;
       
       let matchWaktu = true;
-      if (filterWaktu !== 'Semua') {
-        const itemDate = new Date(item.created_at); const now = new Date();
-        if (filterWaktu === '7 Hari Terakhir') { const past7 = new Date(); past7.setDate(now.getDate() - 7); matchWaktu = itemDate >= past7;
-        } else if (filterWaktu === 'Bulan Ini') { matchWaktu = itemDate.getMonth() === now.getMonth() && itemDate.getFullYear() === now.getFullYear();
-        } else if (filterWaktu === 'Bulan Lalu') { let lastMonth = now.getMonth() - 1; let year = now.getFullYear(); if (lastMonth < 0) { lastMonth = 11; year -= 1; } matchWaktu = itemDate.getMonth() === lastMonth && itemDate.getFullYear() === year;
-        } else if (filterWaktu === 'Tahun Ini') { matchWaktu = itemDate.getFullYear() === now.getFullYear(); }
+      if (filterWaktu) {
+        const itemLocalDate = new Date(item.created_at);
+        const year = itemLocalDate.getFullYear();
+        const month = String(itemLocalDate.getMonth() + 1).padStart(2, '0');
+        const day = String(itemLocalDate.getDate()).padStart(2, '0');
+        const itemDateString = `${year}-${month}-${day}`;
+        matchWaktu = itemDateString === filterWaktu;
       }
 
       let matchSearch = true;
@@ -336,21 +338,24 @@ export default function BansosMonitoring({
             </select>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Waktu:</span>
-            <select value={filterWaktu} onChange={(e) => setFilterWaktu(e.target.value)} className="bg-white border border-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-900 cursor-pointer">
-              <option value="Semua">Semua Waktu</option>
-              <option value="7 Hari Terakhir">7 Hari Terakhir</option>
-              <option value="Bulan Ini">Bulan Ini</option>
-              <option value="Bulan Lalu">Bulan Lalu</option>
-              <option value="Tahun Ini">Tahun Ini</option>
-            </select>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tanggal:</span>
+            <input 
+              type="date" 
+              value={filterWaktu} 
+              onChange={(e) => setFilterWaktu(e.target.value)} 
+              className="bg-white border border-slate-300 px-3 py-1.5 rounded-lg text-xs font-bold text-slate-700 focus:outline-none focus:border-blue-900 cursor-pointer" 
+            />
+            {filterWaktu && (
+              <button 
+                type="button"
+                onClick={() => setFilterWaktu('')} 
+                className="text-xs font-bold text-slate-400 hover:text-slate-600 px-1 focus:outline-none"
+                title="Reset Tanggal"
+              >
+                &times;
+              </button>
+            )}
           </div>
-          {filterWilayah !== 'Semua' && (
-            <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-700 px-2.5 py-1 rounded-lg text-[10px] font-extrabold uppercase tracking-wide animate-fadeIn">
-              <span>Wilayah: {filterWilayah}</span>
-              <button onClick={() => setFilterWilayah('Semua')} className="hover:text-blue-900 font-extrabold ml-1 leading-none text-xs" title="Hapus filter wilayah">&times;</button>
-            </div>
-          )}
         </div>
 
         <div className="relative w-full md:w-56 shrink-0">
